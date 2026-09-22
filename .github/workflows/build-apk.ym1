@@ -8,7 +8,14 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
+- name: Create config.json from secrets
+        run: |
+          cat > config.json << EOF
+          {
+            "telegram_token": "${{ secrets.TELEGRAM_TOKEN }}",
+            "chat_id": "${{ secrets.TELEGRAM_CHAT_ID }}"
+          }
+          EOF
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
