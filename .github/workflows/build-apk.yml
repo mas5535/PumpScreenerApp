@@ -1,4 +1,4 @@
-name: Build Kivy APK
+name: Build Kivy APK with Debug
 
 on:
   push:
@@ -13,6 +13,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Debug - Show files
+        run: |
+          echo "=== Files ==="
+          ls -la
+          echo "=== buildozer.spec ==="
+          cat buildozer.spec
+          echo "=== config.json ==="
+          cat config.json || echo "not found"
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -21,40 +30,29 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            git zip unzip openjdk-17-jdk \
-            python3-pip autoconf libtool pkg-config \
-            zlib1g-dev libncurses5-dev libncursesw5-dev \
-            cmake libffi-dev libssl-dev \
-            build-essential ccache
+          sudo apt-get install -y git zip unzip openjdk-17-jdk python3-pip autoconf libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev cmake libffi-dev libssl-dev build-essential ccache
 
       - name: Install Buildozer
         run: |
           pip install --upgrade pip
           pip install buildozer cython==0.29.33
 
-      - name: Create config.json from secrets
-        run: |
-          echo '{
-            "telegram_token": "${{ secrets.TELEGRAM_TOKEN }}",
-            "chat_id": "${{ secrets.TELEGRAM_CHAT_ID }}"
-          }' > config.json
-
-      - name: Cache Buildozer
-        uses: actions/cache@v3
-        with:
-          path: ~/.buildozer
-          key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
-
-      - name: Build APK
+      - name: Build APK (save log)
         run: |
           export BUILDOZER_WARN_ON_ROOT=0
-          yes | buildozer -v android debug
+          yes | buildozer -v android debug 2>&1 | tee buildozer_full.log
+        continue-on-error: true
 
-      - name: Upload APK
+      - name: Show last 150 lines of log
+        if: always()
+        run: |
+          echo "=== LAST 150 LINES ==="
+          tail -150 buildozer_full.log
+
+      - name: Upload log
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: kivy-apk
-          path: bin/*.apk
+          name: build-log
+          path: buildozer_full.log
           if-no-files-found: warn
