@@ -8,7 +8,7 @@ source.include_exts = py,png,jpg,kv,json,txt,md
 
 version = 1.0.0
 
-requirements = python3,kivy==2.3.1,requests,numpy,pandas,pyTelegramBotAPI,openssl,urllib3,chardet,idna,certifi
+requirements = python3,kivy==2.3.1,requests,pyTelegramBotAPI,openssl,urllib3,chardet,idna,certifi
 
 # دسترسی‌های موردنیاز
 android.permissions = INTERNET,FOREGROUND_SERVICE,RECEIVE_BOOT_COMPLETED,WAKE_LOCK,POST_NOTIFICATIONS
