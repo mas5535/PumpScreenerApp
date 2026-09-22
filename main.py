@@ -11,12 +11,12 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
 from kivy.uix.label import Label
 from kivy.uix.scrollview import ScrollView
-from kivy.clock import Clock
 from kivy.utils import platform
 
-# --- بارگذاری تنظیمات ---
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
+
 
 def load_config():
     if os.path.exists(CONFIG_PATH):
@@ -26,16 +26,12 @@ def load_config():
 
 
 class PumpScreenerApp(App):
-    """اپلیکیشن اصلی"""
-
     def build(self):
         self.title = "Pump Screener"
         self.config = load_config()
 
-        # --- چیدمان اصلی ---
         root = BoxLayout(orientation="vertical", padding=20, spacing=15)
 
-        # --- عنوان ---
         title = Label(
             text="[b]Crypto Pump Screener[/b]",
             markup=True,
@@ -44,7 +40,6 @@ class PumpScreenerApp(App):
         )
         root.add_widget(title)
 
-        # --- وضعیت ---
         self.status_label = Label(
             text="وضعیت: آماده",
             font_size="16sp",
@@ -52,7 +47,6 @@ class PumpScreenerApp(App):
         )
         root.add_widget(self.status_label)
 
-        # --- دکمه شروع سرویس ---
         start_btn = Button(
             text="شروع اسکن خودکار",
             font_size="18sp",
@@ -62,7 +56,6 @@ class PumpScreenerApp(App):
         start_btn.bind(on_press=self.start_service)
         root.add_widget(start_btn)
 
-        # --- دکمه توقف سرویس ---
         stop_btn = Button(
             text="توقف اسکن",
             font_size="18sp",
@@ -72,7 +65,6 @@ class PumpScreenerApp(App):
         stop_btn.bind(on_press=self.stop_service)
         root.add_widget(stop_btn)
 
-        # --- ناحیه نمایش لاگ ---
         scroll = ScrollView(size_hint_y=0.45)
         self.log_label = Label(
             text="",
@@ -90,12 +82,10 @@ class PumpScreenerApp(App):
         return root
 
     def log(self, message):
-        """افزودن پیام به لاگ"""
         current = self.log_label.text
         self.log_label.text = f"{current}\n{message}" if current else message
 
     def start_service(self, instance):
-        """شروع سرویس پس‌زمینه"""
         if platform == "android":
             try:
                 from jnius import autoclass
@@ -103,15 +93,13 @@ class PumpScreenerApp(App):
                 mActivity = autoclass("org.kivy.android.PythonActivity").mActivity
                 service.start(mActivity, "")
                 self.status_label.text = "وضعیت: سرویس در حال اجرا"
-                self.log("✅ سرویس پس‌زمینه شروع شد.")
+                self.log("✅ سرویس شروع شد.")
             except Exception as e:
-                self.log(f"❌ خطا در شروع سرویس: {e}")
+                self.log(f"❌ خطا: {e}")
         else:
-            self.log("ℹ️ سرویس پس‌زمینه فقط روی اندروید کار می‌کند.")
-            self.log("برای تست روی دسکتاپ، service.py را مستقیماً اجرا کنید.")
+            self.log("ℹ️ فقط روی اندروید.")
 
     def stop_service(self, instance):
-        """توقف سرویس پس‌زمینه"""
         if platform == "android":
             try:
                 from jnius import autoclass
@@ -121,7 +109,7 @@ class PumpScreenerApp(App):
                 self.status_label.text = "وضعیت: متوقف شده"
                 self.log("🛑 سرویس متوقف شد.")
             except Exception as e:
-                self.log(f"❌ خطا در توقف سرویس: {e}")
+                self.log(f"❌ خطا: {e}")
 
 
 if __name__ == "__main__":
