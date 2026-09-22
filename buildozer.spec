@@ -20,7 +20,8 @@ services = pumpscreener:service.py
 fullscreen = 0
 orientation = portrait
 android.api = 31
-android.minapi = 21
+android.minapi = 24
+android.ndk_api = 24
 android.arch = arm64-v8a
 
 # آیکون (اختیاری)
