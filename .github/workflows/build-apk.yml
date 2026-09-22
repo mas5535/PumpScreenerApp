@@ -1,22 +1,17 @@
 name: Build Kivy APK
-on: [push, workflow_dispatch]
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Create config.json from secrets
-        run: |
-          cat > config.json << 'EOF'
-          {
-            "telegram_token": "${{ secrets.TELEGRAM_TOKEN }}",
-            "chat_id": "${{ secrets.TELEGRAM_CHAT_ID }}"
-          }
-          EOF
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -26,19 +21,40 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y git zip unzip openjdk-17-jdk python3-pip autoconf libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev cmake libffi-dev libssl-dev
+          sudo apt-get install -y \
+            git zip unzip openjdk-17-jdk \
+            python3-pip autoconf libtool pkg-config \
+            zlib1g-dev libncurses5-dev libncursesw5-dev \
+            cmake libffi-dev libssl-dev \
+            build-essential ccache
 
-      - name: Install Buildozer and Cython
+      - name: Install Buildozer
         run: |
-          pip install buildozer
-          pip install cython==0.29.33
+          pip install --upgrade pip
+          pip install buildozer cython==0.29.33
 
-      - name: Build APK with Buildozer
+      - name: Create config.json from secrets
         run: |
-          buildozer -v android debug
+          echo '{
+            "telegram_token": "${{ secrets.TELEGRAM_TOKEN }}",
+            "chat_id": "${{ secrets.TELEGRAM_CHAT_ID }}"
+          }' > config.json
+
+      - name: Cache Buildozer
+        uses: actions/cache@v3
+        with:
+          path: ~/.buildozer
+          key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
+
+      - name: Build APK
+        run: |
+          export BUILDOZER_WARN_ON_ROOT=0
+          yes | buildozer -v android debug
 
       - name: Upload APK
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: kivy-apk
           path: bin/*.apk
+          if-no-files-found: warn
