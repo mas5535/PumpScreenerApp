@@ -14,7 +14,7 @@ requirements = python3,kivy==2.3.1,requests,pyTelegramBotAPI,openssl,urllib3,cha
 android.permissions = INTERNET,FOREGROUND_SERVICE,RECEIVE_BOOT_COMPLETED,WAKE_LOCK,POST_NOTIFICATIONS
 
 # سرویس پس‌زمینه
-services = pumpscreener:service.py
+services = pumpscreener:service.py:foreground
 
 # تنظیمات نمایش
 fullscreen = 0
