@@ -1,44 +1,26 @@
 """
-سرویس پس‌زمینه اسکنر پامپ — نسخه بدون numpy و pandas
-====================================================
+سرویس پس‌زمینه اسکنر پامپ — نسخه اصلاح‌شده
 """
 
 import os
 import json
 import time
-import math
 import statistics
 import requests
 from datetime import datetime
-
-# --- مسیرهای ذخیره‌سازی ---
-def get_base_dir():
-    if os.path.exists("/data/data/org.pumpscreener.pumpscreener"):
-        return "/data/data/org.pumpscreener.pumpscreener/files"
-    return os.path.dirname(os.path.abspath(__file__))
-
-BASE_DIR = get_base_dir()
-os.makedirs(BASE_DIR, exist_ok=True)
-CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
-
-
-def load_config():
-    try:
-        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return {"telegram_token": "", "chat_id": ""}
 
 
 def log(message):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     line = f"[{timestamp}] {message}"
     print(line)
-    try:
-        with open(os.path.join(BASE_DIR, "screener.log"), "a", encoding="utf-8") as f:
-            f.write(line + "\n")
-    except Exception:
-        pass
+
+
+def load_config():
+    """خواندن تنظیمات از Environment Variables"""
+    token = os.environ.get("TELEGRAM_TOKEN", "")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID", "")
+    return {"telegram_token": token, "chat_id": chat_id}
 
 
 # ============================================================
@@ -70,7 +52,6 @@ class MarketDataFetcher:
             return []
 
     def get_market_chart(self, coin_id, days=14):
-        """دریافت داده‌های قیمت و حجم (جایگزین OHLC)"""
         url = f"{self.BASE_URL}/coins/{coin_id}/market_chart"
         params = {"vs_currency": "usd", "days": days}
         try:
@@ -85,7 +66,7 @@ class MarketDataFetcher:
 
 
 # ============================================================
-# شاخص‌های تکنیکال (بدون numpy/pandas)
+# شاخص‌های تکنیکال
 # ============================================================
 def calculate_rsi(prices, period=14):
     if len(prices) < period + 1:
@@ -93,7 +74,7 @@ def calculate_rsi(prices, period=14):
     gains = []
     losses = []
     for i in range(1, len(prices)):
-        diff = prices[i] - prices[i-1]
+        diff = prices[i] - prices[i - 1]
         if diff > 0:
             gains.append(diff)
             losses.append(0)
@@ -117,10 +98,9 @@ def calculate_bollinger(prices, period=20):
     upper = sma + 2 * std
     lower = sma - 2 * std
     bandwidth = (upper - lower) / sma if sma > 0 else 0
-    # محاسبه صدک
     all_bw = []
     for i in range(period, len(prices) + 1):
-        window = prices[i-period:i]
+        window = prices[i - period:i]
         s = statistics.mean(window)
         st = statistics.stdev(window) if len(window) > 1 else 0
         all_bw.append((2 * st) / s if s > 0 else 0)
@@ -139,12 +119,14 @@ def calculate_volume_ratio(volumes, period=20):
 def calculate_macd(prices):
     if len(prices) < 26:
         return 0, 0
+
     def ema(data, span):
         alpha = 2 / (span + 1)
         result = [data[0]]
         for p in data[1:]:
             result.append(alpha * p + (1 - alpha) * result[-1])
         return result
+
     ema12 = ema(prices, 12)
     ema26 = ema(prices, 26)
     macd_line = [e12 - e26 for e12, e26 in zip(ema12, ema26)]
@@ -164,7 +146,6 @@ def score_technical(chart_data):
     details = {}
     score = 0
 
-    # حجم
     vol_ratio = calculate_volume_ratio(volumes)
     if vol_ratio >= 3.0:
         score += 40
@@ -178,7 +159,6 @@ def score_technical(chart_data):
     else:
         details["volume"] = f"حجم {vol_ratio:.1f}x (عادی)"
 
-    # RSI
     rsi = calculate_rsi(prices)
     if 25 <= rsi <= 35:
         score += 20
@@ -189,7 +169,6 @@ def score_technical(chart_data):
     else:
         details["rsi"] = f"RSI={rsi:.0f}"
 
-    # باند بولینگر
     bw, percentile = calculate_bollinger(prices)
     if percentile <= 20:
         score += 20
@@ -200,7 +179,6 @@ def score_technical(chart_data):
     else:
         details["bb"] = f"باند باز (صدک {percentile:.0f})"
 
-    # MACD
     macd, signal = calculate_macd(prices)
     if macd > signal and macd > 0:
         score += 20
@@ -217,9 +195,9 @@ def score_technical(chart_data):
 def score_onchain(coin):
     score = 0
     details = {}
-    volume = coin.get("total_volume", 0) or 0
-    market_cap = coin.get("market_cap", 1) or 1
-    ratio = volume / market_cap
+    volume = coin.get("total_volume") or 0
+    market_cap = coin.get("market_cap") or 1
+    ratio = volume / market_cap if market_cap > 0 else 0
 
     if ratio >= 0.15:
         score += 50
@@ -231,8 +209,8 @@ def score_onchain(coin):
         score += 15
         details["vol_mcap"] = f"نسبت حجم/مارکت‌کپ={ratio:.3f}"
 
-    change_1h = abs(coin.get("price_change_percentage_1h_in_currency", 0) or 0)
-    change_24h = abs(coin.get("price_change_percentage_24h_in_currency", 0) or 0)
+    change_1h = abs(coin.get("price_change_percentage_1h_in_currency") or 0)
+    change_24h = abs(coin.get("price_change_percentage_24h_in_currency") or 0)
     momentum = (change_1h * 0.6) + (change_24h * 0.4)
 
     if momentum >= 5:
@@ -306,31 +284,36 @@ def run_scan():
     results = []
 
     for i, coin in enumerate(coins):
-        coin_id = coin["id"]
-        symbol = coin["symbol"].upper()
-        log(f"  تحلیل {i+1}/{len(coins)}: {symbol}")
+        try:
+            coin_id = coin.get("id", "")
+            symbol = (coin.get("symbol") or "?").upper()
+            if i % 10 == 0:
+                log(f"  تحلیل {i + 1}/{len(coins)}: {symbol}")
 
-        chart = fetcher.get_market_chart(coin_id, days=14)
-        if not chart["prices"]:
+            chart = fetcher.get_market_chart(coin_id, days=14)
+            if not chart.get("prices"):
+                continue
+
+            tech_score, tech_details = score_technical(chart)
+            onchain_score, onchain_details = score_onchain(coin)
+            final_score = tech_score * 0.55 + onchain_score * 0.45
+
+            results.append({
+                "symbol": symbol,
+                "name": coin.get("name", symbol),
+                "pump_score": round(final_score, 1),
+                "technical_score": round(tech_score, 1),
+                "onchain_score": round(onchain_score, 1),
+                "price": coin.get("current_price") or 0,
+                "market_cap": coin.get("market_cap") or 0,
+                "volume_24h": coin.get("total_volume") or 0,
+                "change_24h": coin.get("price_change_percentage_24h_in_currency") or 0,
+                "details": {**tech_details, **onchain_details},
+            })
+            time.sleep(0.3)
+        except Exception as e:
+            log(f"⚠️ خطا در تحلیل توکن {i + 1}: {e}")
             continue
-
-        tech_score, tech_details = score_technical(chart)
-        onchain_score, onchain_details = score_onchain(coin)
-        final_score = tech_score * 0.55 + onchain_score * 0.45
-
-        results.append({
-            "symbol": symbol,
-            "name": coin["name"],
-            "pump_score": round(final_score, 1),
-            "technical_score": round(tech_score, 1),
-            "onchain_score": round(onchain_score, 1),
-            "price": coin["current_price"],
-            "market_cap": coin["market_cap"],
-            "volume_24h": coin["total_volume"],
-            "change_24h": coin.get("price_change_percentage_24h_in_currency", 0) or 0,
-            "details": {**tech_details, **onchain_details},
-        })
-        time.sleep(0.3)
 
     results.sort(key=lambda x: x["pump_score"], reverse=True)
     alerts = [r for r in results if r["pump_score"] >= 60]
@@ -340,20 +323,13 @@ def run_scan():
 
 
 # ============================================================
-# حلقه اصلی
+# اجرای اصلی (برای Tasks - فقط یک بار اجرا می‌شود)
 # ============================================================
-def main():
-    log("=" * 50)
-    log("🚀 سرویس اسکنر پامپ شروع شد.")
-    while True:
-        try:
-            run_scan()
-            log("⏳ اسکن بعدی تا ۲۴ ساعت دیگر...")
-            time.sleep(24 * 60 * 60)
-        except Exception as e:
-            log(f"❌ خطای غیرمنتظره: {e}")
-            time.sleep(60 * 60)
-
-
 if __name__ == "__main__":
-    main()
+    log("=" * 50)
+    log("🚀 اسکن شروع شد.")
+    try:
+        run_scan()
+        log("✅ اسکن با موفقیت کامل شد.")
+    except Exception as e:
+        log(f"❌ خطای کلی: {e}")
