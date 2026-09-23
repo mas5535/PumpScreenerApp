@@ -274,7 +274,8 @@ def run_scan():
 
     log("🔍 شروع اسکن...")
     fetcher = MarketDataFetcher()
-    coins = fetcher.get_top_coins(limit=80)
+    coins = fetcher.get_top_coins(limit=250)
+    coins = [c for c in coins if (c.get("total_volume") or 0) > 5_000_000]
 
     if not coins:
         log("❌ دریافت داده ناموفق.")
@@ -316,7 +317,7 @@ def run_scan():
             continue
 
     results.sort(key=lambda x: x["pump_score"], reverse=True)
-    alerts = [r for r in results if r["pump_score"] >= 60]
+    alerts = [r for r in results if r["pump_score"] >= 70]
     log(f"📊 {len(alerts)} توکن با امتیاز بالای ۶۰.")
     send_telegram(token, chat_id, alerts)
     return alerts
