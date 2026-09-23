@@ -1,4 +1,4 @@
-name: Build Kivy APK with Debug
+name: Build APK with Error Detection
 
 on:
   push:
@@ -13,14 +13,17 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Debug - Show files
+      - name: Show buildozer.spec
         run: |
-          echo "=== Files ==="
-          ls -la
-          echo "=== buildozer.spec ==="
+          echo "=========================================="
+          echo "BUILDOZER.SPEC CONTENT:"
+          echo "=========================================="
           cat buildozer.spec
-          echo "=== config.json ==="
-          cat config.json || echo "not found"
+          echo ""
+          echo "=========================================="
+          echo "REQUIREMENTS LINE:"
+          echo "=========================================="
+          grep "requirements" buildozer.spec
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -37,22 +40,30 @@ jobs:
           pip install --upgrade pip
           pip install buildozer cython==0.29.33
 
-      - name: Build APK (save log)
+      - name: Build APK
         run: |
           export BUILDOZER_WARN_ON_ROOT=0
-          yes | buildozer -v android debug 2>&1 | tee buildozer_full.log
+          yes | buildozer -v android debug
         continue-on-error: true
 
-      - name: Show last 150 lines of log
-        if: always()
+      - name: Check if APK was built
         run: |
-          echo "=== LAST 150 LINES ==="
-          tail -150 buildozer_full.log
+          echo "=========================================="
+          echo "CHECKING FOR APK FILE:"
+          echo "=========================================="
+          ls -la bin/ || echo "bin/ directory does not exist"
+          echo ""
+          echo "=========================================="
+          echo "LAST 80 LINES OF BUILD LOG:"
+          echo "=========================================="
+          ls -la
 
-      - name: Upload log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-log
-          path: buildozer_full.log
-          if-no-files-found: warn
+      - name: Show errors from log
+        run: |
+          echo "=========================================="
+          echo "SEARCHING FOR ERRORS:"
+          echo "=========================================="
+          if [ -f .buildozer/android/platform/build-arm64-v8a/build/outputs/logs/ ]; then
+            echo "Log dir exists"
+          fi
+          find .buildozer -name "*.log" -exec tail -50 {} \; 2>/dev/null || echo "No log files found"
