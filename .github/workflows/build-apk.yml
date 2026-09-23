@@ -1,69 +1,32 @@
-name: Build APK with Error Detection
+name: Run Pump Screener
 
 on:
-  push:
-    branches: [ main ]
-  workflow_dispatch:
+  schedule:
+    # هر روز ساعت 05:30 UTC = 09:00 به وقت ایران
+    - cron: '30 5 * * *'
+  workflow_dispatch:  # امکان اجرای دستی
 
 jobs:
-  build:
-    runs-on: ubuntu-22.04
+  run-screener:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Show buildozer.spec
-        run: |
-          echo "=========================================="
-          echo "BUILDOZER.SPEC CONTENT:"
-          echo "=========================================="
-          cat buildozer.spec
-          echo ""
-          echo "=========================================="
-          echo "REQUIREMENTS LINE:"
-          echo "=========================================="
-          grep "requirements" buildozer.spec
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.9'
 
-      - name: Install system dependencies
+      - name: Install requests
         run: |
-          sudo apt-get update
-          sudo apt-get install -y git zip unzip openjdk-17-jdk python3-pip autoconf libtool pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev cmake libffi-dev libssl-dev build-essential ccache
+          pip install requests
 
-      - name: Install Buildozer
+      - name: Run Screener
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          pip install --upgrade pip
-          pip install buildozer cython==0.29.33
-
-      - name: Build APK
-        run: |
-          export BUILDOZER_WARN_ON_ROOT=0
-          yes | buildozer -v android debug
-        continue-on-error: true
-
-      - name: Check if APK was built
-        run: |
-          echo "=========================================="
-          echo "CHECKING FOR APK FILE:"
-          echo "=========================================="
-          ls -la bin/ || echo "bin/ directory does not exist"
-          echo ""
-          echo "=========================================="
-          echo "LAST 80 LINES OF BUILD LOG:"
-          echo "=========================================="
-          ls -la
-
-      - name: Show errors from log
-        run: |
-          echo "=========================================="
-          echo "SEARCHING FOR ERRORS:"
-          echo "=========================================="
-          if [ -f .buildozer/android/platform/build-arm64-v8a/build/outputs/logs/ ]; then
-            echo "Log dir exists"
-          fi
-          find .buildozer -name "*.log" -exec tail -50 {} \; 2>/dev/null || echo "No log files found"
+          python service.py
