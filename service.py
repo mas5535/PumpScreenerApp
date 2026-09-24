@@ -231,6 +231,44 @@ def score_onchain(coin):
 # ============================================================
 # ارسال تلگرام
 # ============================================================
+def get_binance_derivatives(symbol):
+    """دریافت Funding Rate و Open Interest از بایننس فیوچرز"""
+    try:
+        base_url = "https://fapi.binance.com"
+        pair = f"{symbol}USDT"
+
+        result = {"funding_rate": None, "open_interest": None}
+
+        # Funding Rate
+        try:
+            resp = requests.get(
+                f"{base_url}/fapi/v1/premiumIndex",
+                params={"symbol": pair},
+                timeout=10
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                result["funding_rate"] = float(data.get("lastFundingRate", 0))
+        except Exception:
+            pass
+
+        # Open Interest
+        try:
+            resp = requests.get(
+                f"{base_url}/fapi/v1/openInterest",
+                params={"symbol": pair},
+                timeout=10
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                result["open_interest"] = float(data.get("openInterest", 0))
+        except Exception:
+            pass
+
+        return result
+    except Exception:
+        return {"funding_rate": None, "open_interest": None}
+        
 def generate_token_analysis(token):
     symbol = token["symbol"]
     score = token["pump_score"]
@@ -298,6 +336,30 @@ def generate_token_analysis(token):
         for w in weaknesses:
             lines.append(f"   • {w}")
 
+        # --- تحلیل بازار فیوچرز ---
+    symbol = token["symbol"]
+    deriv = get_binance_derivatives(symbol)
+
+    deriv_lines = []
+    if deriv["funding_rate"] is not None:
+        fr = deriv["funding_rate"]
+        if fr < -0.01:
+            deriv_lines.append(f"💹 نرخ فاندینگ: {fr*100:.4f}% — فشار فروش زیاد (احتمال اسکوییز)")
+            strengths.append(f"💹 فاندینگ منفی: {fr*100:.4f}%")
+        elif fr > 0.03:
+            deriv_lines.append(f"💹 نرخ فاندینگ: {fr*100:.4f}% — فشار خرید زیاد (احتمال اصلاح)")
+            weaknesses.append(f"💹 فاندینگ بسیار مثبت: {fr*100:.4f}%")
+        else:
+            deriv_lines.append(f"💹 نرخ فاندینگ: {fr*100:.4f}% — نرمال")
+
+    if deriv["open_interest"] is not None:
+        oi = deriv["open_interest"]
+        deriv_lines.append(f"📊 بهره باز (OI): {oi:,.0f}")
+
+    if deriv_lines:
+        lines.append("🎯 <b>بازار فیوچرز:</b>")
+        for dl in deriv_lines:
+            lines.append(f"   {dl}")
     lines.append("")
     if score >= 60:
         lines.append("🎯 <b>پیشنهاد: بررسی جدی برای ورود</b> (حد ضرر ۵٪)")
