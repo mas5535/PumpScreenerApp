@@ -388,40 +388,42 @@ def send_telegram(token, chat_id, alerts, top5):
 
     # ---------- پیام اول: هشدارها ----------
     if alerts:
-        lines = [f"🚨 <b>هشدار پامپ — {date_str}</b>", 
-                 f"تعداد: <b>{len(alerts)}</b> توکن با امتیاز بالای ۶۰\n"]
+        header = (f"🚨 <b>هشدار پامپ — {date_str}</b>\n"
+                  f"تعداد: <b>{len(alerts)}</b> توکن با امتیاز بالای ۶۰")
+        send_single_message(token, chat_id, header)
+        time.sleep(1)
+
         for i, a in enumerate(alerts[:10], 1):
-            lines.append(f"<b>#{i}</b>")
-            lines.append(generate_token_analysis(a))
-            lines.append("─" * 20)
-        lines.append("⚠️ <i>تحلیل قطعی نیست. مدیریت ریسک الزامی است.</i>")
-        
-        msg = "\n".join(lines)
-        for part in split_message(msg):
-            send_single_message(token, chat_id, part)
+            msg = f"<b>🚨 هشدار #{i}</b>\n\n" + generate_token_analysis(a)
+            send_single_message(token, chat_id, msg)
             time.sleep(1)
     else:
-        msg = f"ℹ️ <b>گزارش {date_str}</b>\nامروز توکنی با امتیاز بالای ۶۰ شناسایی نشد."
+        msg = (f"ℹ️ <b>گزارش {date_str}</b>\n"
+               f"امروز توکنی با امتیاز بالای ۶۰ شناسایی نشد.")
         send_single_message(token, chat_id, msg)
         time.sleep(1)
 
-    # ---------- پیام دوم: ۵ توکن برتر ----------
+    # ---------- پیام دوم: ۵ توکن برتر (هر کدام جداگانه) ----------
     if not top5:
         log("⚠️ لیست top5 خالی است.")
         return True
 
-    lines = [f"🏆 <b>۵ توکن برتر امروز — {date_str}</b>\n"]
-    for i, a in enumerate(top5, 1):
-        lines.append(f"<b>#{i}</b>")
-        lines.append(generate_token_analysis(a))
-        lines.append("─" * 20)
-    lines.append("⚠️ <i>تحلیل قطعی نیست. مدیریت ریسک الزامی است.</i>")
+    log(f"📤 ارسال {len(top5)} توکن برتر...")
 
-    msg = "\n".join(lines)
-    log(f"📏 طول پیام دوم: {len(msg)} کاراکتر")
-    for part in split_message(msg):
-        send_single_message(token, chat_id, part)
-        time.sleep(1)
+    header = (f"🏆 <b>۵ توکن برتر امروز — {date_str}</b>\n"
+              f"تعداد: {len(top5)} توکن")
+    send_single_message(token, chat_id, header)
+    time.sleep(1)
+
+    for i, a in enumerate(top5, 1):
+        symbol = a.get("symbol", "?")
+        score = a.get("pump_score", 0)
+        msg = f"<b>🏆 رتبه #{i} — {symbol}</b> (امتیاز {score}/100)\n\n"
+        msg += generate_token_analysis(a)
+        log(f"  ارسال #{i} {symbol} — طول: {len(msg)} کاراکتر")
+        success = send_single_message(token, chat_id, msg)
+        log(f"  نتیجه: {'✅ موفق' if success else '❌ ناموفق'}")
+        time.sleep(2)  # ۲ ثانیه صبر بین پیام‌ها
 
     log("✅ همه پیام‌ها ارسال شد.")
     return True
