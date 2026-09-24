@@ -498,12 +498,41 @@ def run_scan():
     alerts = [r for r in results if r["pump_score"] >= 60]
     log(f"📊 {len(alerts)} توکن با امتیاز بالای ۶۰.")
     top5 = results[:5]
-        log(f"🔍 DEBUG: تعداد نتایج = {len(results)}")
-    log(f"🔍 DEBUG: تعداد top5 = {len(top5)}")
-    for i, t in enumerate(top5):
-        log(f"  #{i+1}: {t['symbol']} — امتیاز {t['pump_score']}")
-    send_telegram(token, chat_id, alerts, top5)
-    return alerts
+    def send_telegram(token, chat_id, alerts, top5):
+    if not token or not chat_id:
+        log("⚠️ توکن یا chat_id تنظیم نشده.")
+        return False
+
+    date_str = datetime.now().strftime('%Y-%m-%d %H:%M')
+    lines = [f"📊 <b>گزارش اسکن — {date_str}</b>\n"]
+
+    if alerts:
+        lines.append(f"🚨 <b>هشدار پامپ: {len(alerts)} توکن با امتیاز بالای ۶۰</b>\n")
+        for i, a in enumerate(alerts[:10], 1):
+            lines.append(f"#{i} {a['symbol']} — امتیاز {a['pump_score']}/100")
+    else:
+        lines.append("ℹ️ <b>امروز توکنی با امتیاز بالای ۶۰ شناسایی نشد.</b>\n")
+
+    lines.append("═" * 20)
+    lines.append("🏆 <b>۵ توکن برتر امروز</b>\n")
+
+    for i, a in enumerate(top5, 1):
+        lines.append(f"<b>#{i} {a['symbol']}</b> — امتیاز {a['pump_score']}/100")
+        lines.append(f"قیمت: ${a['price']:.6f} | تغییر: {a['change_24h']:+.2f}%\n")
+
+    lines.append("⚠️ <i>این تحلیل قطعی نیست.</i>")
+    msg = "\n".join(lines)
+
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload = {"chat_id": chat_id, "text": msg, "parse_mode": "HTML"}
+    try:
+        resp = requests.post(url, json=payload, timeout=15)
+        resp.raise_for_status()
+        log("✅ هشدار تلگرام ارسال شد.")
+        return True
+    except Exception as e:
+        log(f"❌ خطا در ارسال تلگرام: {e}")
+        return False
 
 
 # ============================================================
