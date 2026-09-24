@@ -798,7 +798,7 @@ def run_scan():
     current_date = datetime.now().strftime("%Y-%m-%d")
 
     # ارسال روزانه ۵ توکن برتر در ساعت ۶ UTC = ۹:۳۰ به وقت ایران
-    should_send_daily = (current_hour_utc == 6) and (state["daily_sent"] != current_date)
+    should_send_daily = (current_hour_utc == 4) and (state["daily_sent"] != current_date)
 
     log(f"شروع اسکن... (هشدارهای امروز: {len(alerted_set)}, daily_sent={state['daily_sent']})")
 
