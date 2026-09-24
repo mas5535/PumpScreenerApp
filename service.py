@@ -231,41 +231,139 @@ def score_onchain(coin):
 # ============================================================
 # ارسال تلگرام
 # ============================================================
+def generate_token_analysis(token):
+    symbol = token["symbol"]
+    score = token["pump_score"]
+    details = token.get("details", {})
+    lines = []
+
+    if score >= 60:
+        level = "🟢 سیگنال قوی — فرصت بررسی"
+    elif score >= 40:
+        level = "🟡 سیگنال متوسط — نیاز به صبر"
+    elif score >= 20:
+        level = "🟠 سیگنال ضعیف — فقط رصد"
+    else:
+        level = "🔴 بدون سیگنال — صبر کنید"
+
+    lines.append(f"<b>{symbol}</b> — {level}")
+
+    strengths = []
+    weaknesses = []
+
+    vol = details.get("volume", "")
+    if "قوی" in vol:
+        strengths.append(f"📊 {vol} — ورود پول قوی")
+    elif "خوب" in vol:
+        strengths.append(f"📊 {vol} — افزایش علاقه خریداران")
+    elif "عادی" in vol:
+        weaknesses.append(f"📊 {vol} — حجم معمولی، بدون هیجان")
+
+    rsi = details.get("rsi", "")
+    if "اشباع فروش" in rsi:
+        strengths.append(f"📈 {rsi} — احتمال برگشت بالا")
+    elif "محدوده پامپ" in rsi:
+        strengths.append(f"📈 {rsi} — مومنتوم صعودی")
+
+    bb = details.get("bb", "")
+    if "فشردگی" in bb:
+        strengths.append(f"📉 {bb} — شکست قریب‌الوقوع")
+    elif "باریک" in bb:
+        strengths.append(f"📉 {bb} — باند در حال تنگ شدن")
+    elif "باز" in bb:
+        weaknesses.append(f"📉 {bb} — نوسان بالا، ریسک زیاد")
+
+    macd = details.get("macd", "")
+    if "صعودی" in macd or "کراس" in macd:
+        strengths.append(f"📊 {macd} — تغییر مومنتوم به صعودی")
+    elif "نزولی" in macd:
+        weaknesses.append(f"📊 {macd} — مومنتوم نزولی")
+
+    vm = details.get("vol_mcap", "")
+    if "غیرعادی" in vm:
+        strengths.append(f"🐋 {vm} — احتمال فعالیت نهنگ‌ها")
+    elif "بالا" in vm:
+        strengths.append(f"🐋 {vm} — نسبت قابل توجه")
+
+    mom = details.get("momentum", "")
+    if "بسیار بالا" in mom or "بالا" in mom:
+        strengths.append(f"🚀 {mom}")
+
+    if strengths:
+        lines.append("✅ <b>نقاط قوت:</b>")
+        for s in strengths:
+            lines.append(f"   • {s}")
+    if weaknesses:
+        lines.append("⚠️ <b>نقاط ضعف:</b>")
+        for w in weaknesses:
+            lines.append(f"   • {w}")
+
+    lines.append("")
+    if score >= 60:
+        lines.append("🎯 <b>پیشنهاد: بررسی جدی برای ورود</b> (حد ضرر ۵٪)")
+    elif score >= 40:
+        lines.append("🎯 <b>پیشنهاد: در لیست رصد قرار دهید</b>")
+    elif score >= 20:
+        lines.append("🎯 <b>پیشنهاد: فعلاً ورود نکنید</b>")
+    else:
+        lines.append("🎯 <b>پیشنهاد: صبر کنید</b>")
+
+    return "\n".join(lines)
+    
 def send_telegram(token, chat_id, alerts, top5):
     if not token or not chat_id:
         log("⚠️ توکن یا chat_id تنظیم نشده.")
         return False
 
     date_str = datetime.now().strftime('%Y-%m-%d %H:%M')
-    lines = [f"📊 <b>گزارش اسکن — {date_str}</b>\n"]
 
+    # --- پیام اول: هشدارها ---
     if alerts:
-        lines.append(f"🚨 <b>هشدار پامپ: {len(alerts)} توکن با امتیاز بالای ۶۰</b>\n")
+        lines = [f"🚨 <b>هشدار پامپ — {date_str}</b>",
+                 f"تعداد: <b>{len(alerts)}</b> توکن با امتیاز بالای ۶۰\n"]
+        for i, a in enumerate(alerts[:10], 1):
+            lines.append(f"<b>#{i}</b>")
+            lines.append(generate_token_analysis(a))
+            lines.append("─" * 15)
+        lines.append("⚠️ <i>تحلیل قطعی نیست. مدیریت ریسک الزامی است.</i>")
+        _send_one(token, chat_id, "\n".join(lines))
+        time.sleep(2)
     else:
-        lines.append("ℹ️ <b>امروز توکنی با امتیاز بالای ۶۰ شناسایی نشد.</b>\n")
+        msg = f"ℹ️ <b>گزارش {date_str}</b>\nامروز توکنی با امتیاز بالای ۶۰ شناسایی نشد."
+        _send_one(token, chat_id, msg)
+        time.sleep(2)
 
-    lines.append("═" * 15)
-    lines.append(f"🏆 <b>{len(top5)} توکن برتر امروز</b>\n")
+    # --- پیام دوم: هر توکن برتر در یک پیام جداگانه ---
+    if not top5:
+        return True
+
+    header = f"🏆 <b>۵ توکن برتر امروز — {date_str}</b>"
+    _send_one(token, chat_id, header)
+    time.sleep(2)
 
     for i, a in enumerate(top5, 1):
-        lines.append(f"<b>#{i} {a['symbol']}</b> — امتیاز: <b>{a['pump_score']}/100</b>")
-        lines.append(f"💰 ${a['price']:.6f} | 📈 {a['change_24h']:+.2f}%")
-        for d in a.get("details", {}).values():
-            lines.append(f"   • {d}")
-        lines.append("")
+        symbol = a.get("symbol", "?")
+        score = a.get("pump_score", 0)
+        msg = f"<b>🏆 رتبه #{i} — {symbol}</b> (امتیاز {score}/100)\n"
+        msg += f"💵 ${a['price']:.6f} | 📈 {a['change_24h']:+.2f}%\n\n"
+        msg += generate_token_analysis(a)
+        _send_one(token, chat_id, msg)
+        time.sleep(2)
 
-    lines.append("⚠️ <i>این تحلیل قطعی نیست. مدیریت ریسک الزامی است.</i>")
-    msg = "\n".join(lines)
+    log("✅ همه پیام‌ها ارسال شد.")
+    return True
 
+
+def _send_one(token, chat_id, text):
+    """ارسال یک پیام ساده"""
     url = f"https://api.telegram.org/bot{token}/sendMessage"
-    payload = {"chat_id": chat_id, "text": msg, "parse_mode": "HTML"}
+    payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
     try:
         resp = requests.post(url, json=payload, timeout=15)
         resp.raise_for_status()
-        log("✅ هشدار تلگرام ارسال شد.")
         return True
     except Exception as e:
-        log(f"❌ خطا در ارسال تلگرام: {e}")
+        log(f"❌ خطا در ارسال: {e}")
         return False
 
 
