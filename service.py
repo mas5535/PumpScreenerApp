@@ -229,11 +229,88 @@ def score_onchain(coin):
 # ============================================================
 # ارسال تلگرام
 # ============================================================
+def generate_token_analysis(token):
+    """تولید تحلیل متنی دقیق برای یک توکن"""
+    symbol = token["symbol"]
+    score = token["pump_score"]
+    tech = token["technical_score"]
+    onchain = token["onchain_score"]
+    details = token.get("details", {})
+
+    lines = []
+
+    # سطح سیگنال
+    if score >= 60:
+        level = "🟢 سیگنال قوی"
+    elif score >= 40:
+        level = "🟡 سیگنال متوسط"
+    elif score >= 20:
+        level = "🟠 سیگنال ضعیف"
+    else:
+        level = "🔴 بدون سیگنال"
+
+    lines.append(f"<b>{symbol}</b> — {level}")
+    lines.append(f"امتیاز: <b>{score}/100</b> (تکنیکال: {tech} | آن‌چین: {onchain})")
+
+    strengths = []
+    weaknesses = []
+
+    vol = details.get("volume", "")
+    if "قوی" in vol:
+        strengths.append("حجم بالا (ورود پول)")
+    elif "خوب" in vol:
+        strengths.append("حجم خوب")
+    elif "عادی" in vol:
+        weaknesses.append("حجم عادی")
+
+    rsi = details.get("rsi", "")
+    if "اشباع فروش" in rsi:
+        strengths.append("RSI اشباع فروش (فرصت ورود)")
+    elif "محدوده پامپ" in rsi:
+        strengths.append("RSI در محدوده پامپ")
+
+    bb = details.get("bb", "")
+    if "فشردگی" in bb:
+        strengths.append("فشردگی باند (شکست نزدیک)")
+    elif "باریک" in bb:
+        strengths.append("باند نسبتاً باریک")
+    elif "باز" in bb:
+        weaknesses.append("باند باز (نوسان بالا)")
+
+    macd = details.get("macd", "")
+    if "صعودی" in macd or "کراس" in macd:
+        strengths.append("MACD صعودی")
+    elif "نزولی" in macd:
+        weaknesses.append("MACD نزولی")
+
+    vm = details.get("vol_mcap", "")
+    if "غیرعادی" in vm:
+        strengths.append("فعالیت غیرعادی نهنگ‌ها")
+    elif "بالا" in vm:
+        strengths.append("نسبت حجم/مارکت‌کپ بالا")
+
+    mom = details.get("momentum", "")
+    if "بسیار بالا" in mom or "بالا" in mom:
+        strengths.append("شتاب قیمت بالا")
+
+    if strengths:
+        lines.append("✅ نقاط قوت:")
+        for s in strengths:
+            lines.append(f"   • {s}")
+    if weaknesses:
+        lines.append("⚠️ نقاط ضعف:")
+        for w in weaknesses:
+            lines.append(f"   • {w}")
+
+    if score >= 60:
+        lines.append("📌 <b>جمع‌بندی: فرصت مناسب برای بررسی</b>")
+    elif score >= 40:
+        lines.append("📌 <b>جمع‌بندی: نیاز به صبر و بررسی</b>")
+    else:
+        lines.append("📌 <b>جمع‌بندی: فعلاً سیگنالی ندارد</b>")
+
+    return "\n".join(lines)
 def send_telegram(token, chat_id, alerts, top5):
-    """
-    alerts: توکن‌های با امتیاز بالای ۶۰ (ممکن است خالی باشد)
-    top5: همیشه ۵ توکن برتر (حتی با امتیاز پایین)
-    """
     if not token or not chat_id:
         log("⚠️ توکن یا chat_id تنظیم نشده.")
         return False
@@ -241,32 +318,24 @@ def send_telegram(token, chat_id, alerts, top5):
     date_str = datetime.now().strftime('%Y-%m-%d %H:%M')
     lines = [f"📊 <b>گزارش اسکن — {date_str}</b>\n"]
 
-    # بخش ۱: هشدارهای قوی (امتیاز ۶۰+)
     if alerts:
         lines.append(f"🚨 <b>هشدار پامپ: {len(alerts)} توکن با امتیاز بالای ۶۰</b>\n")
         for i, a in enumerate(alerts[:10], 1):
-            emoji = "🔴" if a["pump_score"] >= 85 else "🟠" if a["pump_score"] >= 70 else "🟡"
-            lines.append(f"{emoji} <b>#{i} {a['symbol']}</b> — امتیاز: <b>{a['pump_score']}/100</b>")
-            lines.append(f"   💰 قیمت: ${a['price']:.6f}")
-            lines.append(f"   📈 تغییر ۲۴h: {a['change_24h']:+.2f}%")
-            for d in a.get("details", {}).values():
-                lines.append(f"   • {d}")
+            lines.append(f"<b>#{i}</b>")
+            lines.append(generate_token_analysis(a))
             lines.append("")
     else:
         lines.append("ℹ️ <b>امروز توکنی با امتیاز بالای ۶۰ شناسایی نشد.</b>\n")
 
-    # بخش ۲: همیشه ۵ توکن برتر (حتی با امتیاز پایین)
     lines.append("═" * 20)
-    lines.append(f"🏆 <b>۵ توکن برتر امروز (مستعد پامپ)</b>\n")
-    for i, a in enumerate(top5, 1):
-        lines.append(f"<b>#{i} {a['symbol']}</b> — امتیاز: <b>{a['pump_score']}/100</b>")
-        lines.append(f"   💰 ${a['price']:.6f}")
-        lines.append(f"   📈 {a['change_24h']:+.2f}%")
-        for d in a.get("details", {}).values():
-            lines.append(f"   • {d}")
-        lines.append("")
+    lines.append("🏆 <b>۵ توکن برتر امروز (تحلیل کامل)</b>\n")
 
-    lines.append("⚠️ <i>این هشدار پیش‌بینی قطعی نیست. مدیریت ریسک الزامی است.</i>")
+    for i, a in enumerate(top5, 1):
+        lines.append(f"<b>#{i}</b>")
+        lines.append(generate_token_analysis(a))
+        lines.append("─" * 20)
+
+    lines.append("⚠️ <i>این تحلیل پیش‌بینی قطعی نیست. مدیریت ریسک الزامی است.</i>")
     msg = "\n".join(lines)
 
     url = f"https://api.telegram.org/bot{token}/sendMessage"
