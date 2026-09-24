@@ -1,47 +1,20 @@
 """
-اسکنر پامپ — نسخه حرفه‌ای با تحلیل پیشرفته
-شامل: ایچیموکو، VWAP، واگرایی RSI، Volume Profile،
-       نسبت لانگ/شورت، شاخص ترس و طمع، فاندینگ، عمق بازار
+اسکنر پامپ — نسخه نهایی
+هشدار ساعتی (امتیاز ۷۰+) + گزارش روزانه ۵ توکن برتر (۸ صبح ایران)
 """
 
 import os
 import time
+import json
 import statistics
 import requests
 from datetime import datetime
+
+
 # ============================================================
 # State — جلوگیری از ارسال تکراری
 # ============================================================
 STATE_FILE = "alerted.json"
-
-
-def load_state():
-    today = datetime.now().strftime("%Y-%m-%d")
-    try:
-        if os.path.exists(STATE_FILE):
-            import json
-            with open(STATE_FILE, "r") as f:
-                data = json.load(f)
-            if data.get("date") == today:
-                return {
-                    "alerted": set(data.get("alerted", [])),
-                    "daily_sent": data.get("daily_sent", ""),
-                }
-    except Exception:
-        pass
-    return {"alerted": set(), "daily_sent": ""}
-
-
-def save_state(state):
-    import json
-    data = {
-        "date": datetime.now().strftime("%Y-%m-%d"),
-        "alerted": list(state["alerted"]),
-        "daily_sent": state.get("daily_sent", ""),
-        "updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-    }
-    with open(STATE_FILE, "w") as f:
-        json.dump(data, f))
 
 
 def log(message):
@@ -56,29 +29,53 @@ def load_config():
     }
 
 
+def load_state():
+    today = datetime.now().strftime("%Y-%m-%d")
+    try:
+        if os.path.exists(STATE_FILE):
+            with open(STATE_FILE, "r") as f:
+                data = json.load(f)
+            if data.get("date") == today:
+                return {
+                    "alerted": set(data.get("alerted", [])),
+                    "daily_sent": data.get("daily_sent", ""),
+                }
+    except Exception:
+        pass
+    return {"alerted": set(), "daily_sent": ""}
+
+
+def save_state(state):
+    data = {
+        "date": datetime.now().strftime("%Y-%m-%d"),
+        "alerted": list(state["alerted"]),
+        "daily_sent": state.get("daily_sent", ""),
+        "updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    }
+    with open(STATE_FILE, "w") as f:
+        json.dump(data, f)
+
+
 # ============================================================
-# داده‌های بایننس (فیوچرز، عمق بازار، لانگ/شورت)
+# داده‌های OKX (فیوچرز، عمق، لانگ/شورت)
 # ============================================================
 def get_futures_data(symbol):
-    """دریافت Funding Rate و OI از OKX"""
     result = {"funding_rate": None, "open_interest": None}
     inst = symbol + "-USDT-SWAP"
     try:
-        url = "https://www.okx.com/api/v5/public/funding-rate"
-        r = requests.get(url, params={"instId": inst}, timeout=8)
+        r = requests.get("https://www.okx.com/api/v5/public/funding-rate",
+                         params={"instId": inst}, timeout=8)
         if r.status_code == 200:
-            data = r.json()
-            lst = data.get("data", [])
+            lst = r.json().get("data", [])
             if lst:
                 result["funding_rate"] = float(lst[0].get("fundingRate", 0))
     except Exception:
         pass
     try:
-        url = "https://www.okx.com/api/v5/public/open-interest"
-        r = requests.get(url, params={"instType": "SWAP", "instId": inst}, timeout=8)
+        r = requests.get("https://www.okx.com/api/v5/public/open-interest",
+                         params={"instType": "SWAP", "instId": inst}, timeout=8)
         if r.status_code == 200:
-            data = r.json()
-            lst = data.get("data", [])
+            lst = r.json().get("data", [])
             if lst:
                 result["open_interest"] = float(lst[0].get("oi", 0))
     except Exception:
@@ -87,15 +84,13 @@ def get_futures_data(symbol):
 
 
 def get_order_book_pressure(symbol):
-    """دریافت عمق بازار از OKX"""
     try:
         url = "https://www.okx.com/api/v5/market/books"
         params = {"instId": symbol + "-USDT", "sz": 100}
         r = requests.get(url, params=params, timeout=8)
         if r.status_code != 200:
             return None
-        data = r.json()
-        lst = data.get("data", [])
+        lst = r.json().get("data", [])
         if not lst:
             return None
         bids = lst[0].get("bids", [])
@@ -117,14 +112,12 @@ def get_order_book_pressure(symbol):
 
 
 def get_long_short_ratio(symbol):
-    """نسبت لانگ/شورت از OKX"""
     try:
         url = "https://www.okx.com/api/v5/rubik/stat/contracts/long-short-account-ratio"
         params = {"ccy": symbol, "period": "1H"}
         r = requests.get(url, params=params, timeout=8)
         if r.status_code == 200:
-            data = r.json()
-            lst = data.get("data", [])
+            lst = r.json().get("data", [])
             if lst:
                 ratio = float(lst[0][1])
                 long_pct = ratio / (1 + ratio) * 100
@@ -136,7 +129,6 @@ def get_long_short_ratio(symbol):
 
 
 def get_fear_greed():
-    """شاخص ترس و طمع از Alternative.me"""
     try:
         r = requests.get("https://api.alternative.me/fng/?limit=1", timeout=8)
         if r.status_code == 200:
@@ -151,7 +143,7 @@ def get_fear_greed():
 
 
 # ============================================================
-# دریافت داده از CoinGecko
+# CoinGecko
 # ============================================================
 class MarketDataFetcher:
     BASE_URL = "https://api.coingecko.com/api/v3"
@@ -173,7 +165,7 @@ class MarketDataFetcher:
             log(f"خطا در درخواست: {e}")
             return None
 
-    def get_top_coins(self, limit=30):
+    def get_top_coins(self, limit=25):
         url = self.BASE_URL + "/coins/markets"
         params = {
             "vs_currency": "usd",
@@ -334,39 +326,32 @@ def calculate_vwap(prices, volumes):
 
 
 def detect_rsi_divergence(prices, rsi_values):
-    """تشخیص واگرایی RSI در ۲۰ کندل آخر"""
     if len(prices) < 30 or len(rsi_values) < 30:
         return None
-
     recent_p = prices[-20:]
     recent_r = rsi_values[-20:]
     if len(recent_p) != len(recent_r):
         return None
 
-    # قله‌های محلی
     p_highs = []
     for i in range(2, len(recent_p) - 2):
         if (recent_p[i] > recent_p[i - 1] and recent_p[i] > recent_p[i - 2]
                 and recent_p[i] > recent_p[i + 1] and recent_p[i] > recent_p[i + 2]):
             p_highs.append((i, recent_p[i], recent_r[i]))
-
     if len(p_highs) >= 2:
         p1, p2 = p_highs[-2], p_highs[-1]
         if p2[1] > p1[1] and p2[2] < p1[2]:
-            return "واگرایی نزولی (Bearish Divergence)"
+            return "واگرایی نزولی (Bearish)"
 
-    # دره‌های محلی
     p_lows = []
     for i in range(2, len(recent_p) - 2):
         if (recent_p[i] < recent_p[i - 1] and recent_p[i] < recent_p[i - 2]
                 and recent_p[i] < recent_p[i + 1] and recent_p[i] < recent_p[i + 2]):
             p_lows.append((i, recent_p[i], recent_r[i]))
-
     if len(p_lows) >= 2:
         p1, p2 = p_lows[-2], p_lows[-1]
         if p2[1] < p1[1] and p2[2] > p1[2]:
-            return "واگرایی صعودی (Bullish Divergence)"
-
+            return "واگرایی صعودی (Bullish)"
     return None
 
 
@@ -384,7 +369,6 @@ def calculate_volume_profile(prices, volumes, bins=20):
         profile[idx] += v
     poc_idx = profile.index(max(profile))
     poc = min_p + (poc_idx + 0.5) * bin_size
-
     total_vol = sum(profile)
     target = total_vol * 0.7
     sorted_idx = sorted(range(bins), key=lambda i: profile[i], reverse=True)
@@ -397,7 +381,6 @@ def calculate_volume_profile(prices, volumes, bins=20):
             break
     vah = min_p + (max(va_idx) + 1) * bin_size
     val = min_p + min(va_idx) * bin_size
-
     return {"poc": poc, "vah": vah, "val": val}
 
 
@@ -412,7 +395,6 @@ def score_technical(chart_data):
     details = {}
     score = 0
 
-    # حجم
     vol_ratio = calculate_volume_ratio(volumes)
     if vol_ratio >= 3.0:
         score += 25
@@ -426,7 +408,6 @@ def score_technical(chart_data):
     else:
         details["volume"] = f"حجم {vol_ratio:.1f}x (عادی)"
 
-    # RSI
     rsi = calculate_rsi(prices)
     if 25 <= rsi <= 35:
         score += 15
@@ -437,7 +418,6 @@ def score_technical(chart_data):
     else:
         details["rsi"] = f"RSI={rsi:.0f}"
 
-    # بولینگر
     bw, percentile = calculate_bollinger(prices)
     if percentile <= 20:
         score += 15
@@ -448,7 +428,6 @@ def score_technical(chart_data):
     else:
         details["bb"] = f"باند باز (صدک {percentile:.0f})"
 
-    # MACD
     macd, signal = calculate_macd(prices)
     if macd > signal and macd > 0:
         score += 15
@@ -459,13 +438,11 @@ def score_technical(chart_data):
     else:
         details["macd"] = "MACD خنثی/نزولی"
 
-    # ایچیموکو
     ichi = calculate_ichimoku(prices)
     if ichi:
         score += ichi["score"]
         details["ichimoku"] = f"ایچیموکو: {ichi['signal']}"
 
-    # VWAP
     vwap = calculate_vwap(prices, volumes)
     if vwap:
         if vwap["above"]:
@@ -474,7 +451,6 @@ def score_technical(chart_data):
         else:
             details["vwap"] = f"VWAP: زیر {vwap['vwap']:.4f} ({vwap['diff_pct']:.2f}%)"
 
-    # واگرایی RSI
     rsi_series = calculate_rsi_series(prices)
     div = detect_rsi_divergence(prices, rsi_series)
     if div:
@@ -484,7 +460,6 @@ def score_technical(chart_data):
         else:
             details["divergence"] = f"⚠️ {div}"
 
-    # Volume Profile
     vp = calculate_volume_profile(prices, volumes)
     if vp:
         current = prices[-1]
@@ -493,7 +468,7 @@ def score_technical(chart_data):
             details["vp"] = f"Volume Profile: بالای VAH ({vp['vah']:.4f})"
         elif current < vp["val"]:
             score += 5
-            details["vp"] = f"Volume Profile: زیر VAL ({vp['val']:.4f}) — فرصت"
+            details["vp"] = f"Volume Profile: زیر VAL ({vp['val']:.4f})"
         else:
             details["vp"] = f"Volume Profile: در محدوده ارزش (POC: {vp['poc']:.4f})"
 
@@ -533,30 +508,9 @@ def score_onchain(coin):
 
     return min(score, 100), details
 
-def get_whale_activity(symbol):
-    """دریافت تراکنش‌های بزرگ از CryptoWhaleInsights (بدون API Key)"""
-    try:
-        url = "https://api.cryptowhaleinsights.com/v1/whales/recent"
-        r = requests.get(url, timeout=10)
-        if r.status_code == 200:
-            data = r.json()
-            transactions = data.get("data", [])
-            related = [t for t in transactions 
-                      if symbol.upper() in str(t.get("symbol", "")).upper()]
-            if related:
-                total_usd = sum(float(t.get("value_usd", 0)) for t in related)
-                return {
-                    "count": len(related),
-                    "total_usd": total_usd,
-                    "latest": float(related[0].get("value_usd", 0)),
-                }
-    except Exception:
-        pass
-    return None
-
 
 # ============================================================
-# تولید تحلیل کامل
+# تولید تحلیل
 # ============================================================
 def generate_token_analysis(token):
     symbol = token["symbol"]
@@ -565,140 +519,120 @@ def generate_token_analysis(token):
     lines = []
 
     if score >= 70:
-        level = "🟢 سیگنال قوی — فرصت بررسی"
+        level = "🟢 سیگنال قوی"
     elif score >= 50:
-        level = "🟡 سیگنال متوسط — نیاز به صبر"
+        level = "🟡 سیگنال متوسط"
     elif score >= 30:
-        level = "🟠 سیگنال ضعیف — فقط رصد"
+        level = "🟠 سیگنال ضعیف"
     else:
-        level = "🔴 بدون سیگنال — صبر کنید"
+        level = "🔴 بدون سیگنال"
 
     lines.append(f"<b>{symbol}</b> — {level}")
 
     strengths = []
     weaknesses = []
 
-    # حجم
     vol = details.get("volume", "")
-    if "قوی" in vol:
-        strengths.append(f"📊 {vol} — ورود پول قوی")
-    elif "خوب" in vol:
-        strengths.append(f"📊 {vol} — افزایش علاقه خریداران")
+    if "قوی" in vol or "خوب" in vol:
+        strengths.append(f"📊 {vol}")
     elif "عادی" in vol:
-        weaknesses.append(f"📊 {vol} — حجم معمولی")
+        weaknesses.append(f"📊 {vol}")
 
-    # RSI
     rsi = details.get("rsi", "")
-    if "اشباع فروش" in rsi:
-        strengths.append(f"📈 {rsi} — احتمال برگشت بالا")
-    elif "محدوده پامپ" in rsi:
-        strengths.append(f"📈 {rsi} — مومنتوم صعودی")
+    if "اشباع فروش" in rsi or "محدوده پامپ" in rsi:
+        strengths.append(f"📈 {rsi}")
 
-    # بولینگر
     bb = details.get("bb", "")
-    if "فشردگی" in bb:
-        strengths.append(f"📉 {bb} — شکست قریب‌الوقوع")
-    elif "باریک" in bb:
-        strengths.append(f"📉 {bb} — باند در حال تنگ شدن")
+    if "فشردگی" in bb or "باریک" in bb:
+        strengths.append(f"📉 {bb}")
     elif "باز" in bb:
-        weaknesses.append(f"📉 {bb} — نوسان بالا")
+        weaknesses.append(f"📉 {bb}")
 
-    # MACD
     macd = details.get("macd", "")
     if "صعودی" in macd or "کراس" in macd:
         strengths.append(f"📊 {macd}")
     elif "نزولی" in macd:
         weaknesses.append(f"📊 {macd}")
 
-    # ایچیموکو
     ichi = details.get("ichimoku", "")
     if "صعودی" in ichi:
         strengths.append(f"☁️ {ichi}")
     elif "نزولی" in ichi:
         weaknesses.append(f"☁️ {ichi}")
-    elif ichi:
-        strengths.append(f"☁️ {ichi}")
 
-    # VWAP
     vwap = details.get("vwap", "")
     if vwap and "بالای" in vwap:
         strengths.append(f"📏 {vwap}")
     elif vwap and "زیر" in vwap:
         weaknesses.append(f"📏 {vwap}")
 
-    # واگرایی
     div = details.get("divergence", "")
-    if div and "صعودی" in div:
-        strengths.append(f"🔀 {div}")
-    elif div and "نزولی" in div:
-        weaknesses.append(f"🔀 {div}")
+    if div:
+        if "صعودی" in div:
+            strengths.append(f"🔀 {div}")
+        else:
+            weaknesses.append(f"🔀 {div}")
 
-    # Volume Profile
     vp = details.get("vp", "")
     if vp:
         strengths.append(f"📦 {vp}")
 
-    # نسبت حجم به مارکت‌کپ
     vm = details.get("vol_mcap", "")
-    if "غیرعادی" in vm:
-        strengths.append(f"🐋 {vm} — احتمال فعالیت نهنگ‌ها")
-    elif "بالا" in vm:
+    if "غیرعادی" in vm or "بالا" in vm:
         strengths.append(f"🐋 {vm}")
 
-    # شتاب
     mom = details.get("momentum", "")
     if "بسیار بالا" in mom or "بالا" in mom:
         strengths.append(f"🚀 {mom}")
 
-    # --- بازار فیوچرز ---
+    # --- بازار فیوچرز (OKX) ---
     deriv = get_futures_data(symbol)
     deriv_lines = []
     if deriv["funding_rate"] is not None:
         fr = deriv["funding_rate"]
         if fr < -0.01:
-            deriv_lines.append(f"💹 فاندینگ: {fr*100:.4f}% — فشار فروش (احتمال اسکوییز)")
-            strengths.append(f"💹 فاندینگ منفی: {fr*100:.4f}%")
+            deriv_lines.append(f"💹 فاندینگ: {fr*100:.4f}% (فشار فروش — احتمال اسکوییز)")
+            strengths.append(f"💹 فاندینگ منفی")
         elif fr > 0.03:
-            deriv_lines.append(f"💹 فاندینگ: {fr*100:.4f}% — فشار خرید (احتمال اصلاح)")
-            weaknesses.append(f"💹 فاندینگ مثبت بالا: {fr*100:.4f}%")
+            deriv_lines.append(f"💹 فاندینگ: {fr*100:.4f}% (فشار خرید — احتمال اصلاح)")
+            weaknesses.append(f"💹 فاندینگ مثبت بالا")
         else:
-            deriv_lines.append(f"💹 فاندینگ: {fr*100:.4f}% — نرمال")
+            deriv_lines.append(f"💹 فاندینگ: {fr*100:.4f}% (نرمال)")
     if deriv["open_interest"] is not None:
-        deriv_lines.append(f"📊 بهره باز (OI): {deriv['open_interest']:,.0f}")
+        deriv_lines.append(f"📊 بهره باز: {deriv['open_interest']:,.0f}")
     if deriv_lines:
         lines.append("🎯 <b>بازار فیوچرز:</b>")
         for dl in deriv_lines:
             lines.append(f"   {dl}")
 
-    # --- عمق بازار ---
+    # --- عمق بازار (OKX) ---
     ob = get_order_book_pressure(symbol)
     if ob:
         ratio = ob["ratio"]
         if ratio > 1.5:
-            lines.append(f"📋 عمق بازار: خرید/فروش={ratio:.2f} — فشار خرید قوی")
-            strengths.append(f"📋 فشار خرید ({ratio:.2f})")
+            lines.append(f"📋 عمق بازار: خرید/فروش={ratio:.2f} (فشار خرید)")
+            strengths.append(f"📋 فشار خرید")
         elif ratio < 0.7:
-            lines.append(f"📋 عمق بازار: خرید/فروش={ratio:.2f} — فشار فروش قوی")
-            weaknesses.append(f"📋 فشار فروش ({ratio:.2f})")
+            lines.append(f"📋 عمق بازار: خرید/فروش={ratio:.2f} (فشار فروش)")
+            weaknesses.append(f"📋 فشار فروش")
         else:
-            lines.append(f"📋 عمق بازار: خرید/فروش={ratio:.2f} — متعادل")
+            lines.append(f"📋 عمق بازار: خرید/فروش={ratio:.2f} (متعادل)")
 
-    # --- نسبت لانگ/شورت ---
+    # --- لانگ/شورت (OKX) ---
     ls = get_long_short_ratio(symbol)
     if ls:
-        lines.append(f"⚖️ لانگ/شورت: {ls['long']:.1f}% / {ls['short']:.1f}% (نسبت {ls['ratio']:.2f})")
+        lines.append(f"⚖️ لانگ/شورت: {ls['long']:.1f}% / {ls['short']:.1f}%")
         if ls["ratio"] > 2.0:
-            weaknesses.append(f"⚖️ لانگ بیش از حد ({ls['ratio']:.2f}) — احتمال اصلاح")
+            weaknesses.append(f"⚖️ لانگ بیش از حد")
         elif ls["ratio"] < 0.8:
-            strengths.append(f"⚖️ شورت بیش از حد ({ls['ratio']:.2f}) — احتمال اسکوییز")
+            strengths.append(f"⚖️ شورت بیش از حد")
 
-    # --- شاخص ترس و طمع (فقط برای BTC) ---
+    # --- ترس و طمع (BTC) ---
     if symbol == "BTC":
         fg = get_fear_greed()
         if fg:
             lines.append(f"😱 ترس و طمع: {fg['value']} ({fg['classification']})")
 
-    # --- نقاط قوت و ضعف ---
     if strengths:
         lines.append("✅ <b>نقاط قوت:</b>")
         for s in strengths:
@@ -708,12 +642,11 @@ def generate_token_analysis(token):
         for w in weaknesses:
             lines.append(f"   • {w}")
 
-    # --- پیشنهاد ---
     lines.append("")
     if score >= 70:
         lines.append("🎯 <b>پیشنهاد: بررسی جدی برای ورود</b> (حد ضرر ۵٪)")
     elif score >= 50:
-        lines.append("🎯 <b>پیشنهاد: در لیست رصد قرار دهید</b>")
+        lines.append("🎯 <b>پیشنهاد: در لیست رصد</b>")
     elif score >= 30:
         lines.append("🎯 <b>پیشنهاد: فعلاً ورود نکنید</b>")
     else:
@@ -738,20 +671,16 @@ def _send_one(token, chat_id, text):
 
 
 def send_telegram(token, chat_id, alerts, alerted_set):
-    """ارسال هشدار فقط برای توکن‌های جدید"""
     if not token or not chat_id:
         log("توکن یا chat_id تنظیم نشده.")
         return False
 
-    # فقط توکن‌های جدید
     new_alerts = [a for a in alerts if a["symbol"] not in alerted_set]
-
     if not new_alerts:
         log("هیچ هشدار جدیدی نیست.")
         return True
 
     date_str = datetime.now().strftime('%Y-%m-%d %H:%M')
-
     header = f"🚨 <b>هشدار پامپ — {date_str}</b>\nتعداد: <b>{len(new_alerts)}</b> توکن"
     _send_one(token, chat_id, header)
     time.sleep(2)
@@ -767,7 +696,13 @@ def send_telegram(token, chat_id, alerts, alerted_set):
     log(f"{len(new_alerts)} هشدار جدید ارسال شد.")
     return True
 
-    header = f"🏆 <b>۵ توکن برتر — {date_str}</b>"
+
+def send_daily_top5(token, chat_id, top5):
+    if not token or not chat_id or not top5:
+        return False
+
+    date_str = datetime.now().strftime('%Y-%m-%d %H:%M')
+    header = f"🏆 <b>گزارش روزانه — {date_str}</b>\n۵ توکن برتر"
     _send_one(token, chat_id, header)
     time.sleep(2)
 
@@ -778,7 +713,7 @@ def send_telegram(token, chat_id, alerts, alerted_set):
         _send_one(token, chat_id, msg)
         time.sleep(3)
 
-    log("همه پیام‌ها ارسال شد.")
+    log("گزارش روزانه ارسال شد.")
     return True
 
 
@@ -793,14 +728,12 @@ def run_scan():
     state = load_state()
     alerted_set = state["alerted"]
 
-    # ساعت فعلی UTC (ایران = UTC+3:30)
+    # ساعت ۴ UTC = ۸ صبح ایران
     current_hour_utc = datetime.utcnow().hour
     current_date = datetime.now().strftime("%Y-%m-%d")
-
-    # ارسال روزانه ۵ توکن برتر در ساعت ۶ UTC = ۹:۳۰ به وقت ایران
     should_send_daily = (current_hour_utc == 4) and (state["daily_sent"] != current_date)
 
-    log(f"شروع اسکن... (هشدارهای امروز: {len(alerted_set)}, daily_sent={state['daily_sent']})")
+    log(f"شروع اسکن... (هشدارهای امروز: {len(alerted_set)}, ساعت UTC: {current_hour_utc})")
 
     fetcher = MarketDataFetcher()
     coins = fetcher.get_top_coins(limit=25)
@@ -839,47 +772,30 @@ def run_scan():
 
     all_results.sort(key=lambda x: x["pump_score"], reverse=True)
 
-    # ==================== ۱. هشدارهای پامپ (۷۰+) ====================
+    # هشدارهای پامپ (۷۰+)
     pump_alerts = [r for r in all_results if r["pump_score"] >= 70]
-    new_alerts = [a for a in pump_alerts if a["symbol"] not in alerted_set]
-
-    if new_alerts:
-        log(f"🚨 {len(new_alerts)} هشدار پامپ جدید!")
-        send_telegram(token, chat_id, new_alerts, alerted_set)
+    if pump_alerts:
+        log(f"🚨 {len(pump_alerts)} توکن با امتیاز ۷۰+")
+        send_telegram(token, chat_id, pump_alerts, alerted_set)
         state["alerted"] = alerted_set
         save_state(state)
     else:
-        log("هیچ هشدار پامپ جدیدی نیست.")
+        log("هیچ توکنی امتیاز ۷۰+ ندارد.")
 
-    # ==================== ۲. ۵ توکن برتر روزانه ====================
+    # گزارش روزانه (ساعت ۸ صبح ایران)
     if should_send_daily and all_results:
-        log(f"📊 ارسال روزانه ۵ توکن برتر (ساعت UTC: {current_hour_utc})")
+        log("📊 ارسال گزارش روزانه...")
         send_daily_top5(token, chat_id, all_results[:5])
         state["daily_sent"] = current_date
         save_state(state)
-    elif should_send_daily:
-        log("📊 زمان ارسال روزانه است اما نتیجه‌ای وجود ندارد.")
 
     return all_results
 
 
-def send_daily_top5(token, chat_id, top5):
-    """ارسال روزانه ۵ توکن برتر (حتی بدون امتیاز ۷۰)"""
-    if not token or not chat_id:
-        return False
-
-    date_str = datetime.now().strftime('%Y-%m-%d %H:%M')
-
-    header = f"🏆 <b>گزارش روزانه — {date_str}</b>\n۵ توکن برتر ۲۴ ساعت گذشته"
-    _send_one(token, chat_id, header)
-    time.sleep(2)
-
-    for i, a in enumerate(top5, 1):
-        msg = f"<b>🏆 رتبه #{i} — {a['symbol']}</b> (امتیاز {a['pump_score']}/100)\n"
-        msg += f"💵 ${a['price']:.6f} | 📈 {a['change_24h']:+.2f}%\n\n"
-        msg += generate_token_analysis(a)
-        _send_one(token, chat_id, msg)
-        time.sleep(3)
-
-    log("گزارش روزانه ارسال شد.")
-    return True
+if __name__ == "__main__":
+    log("=" * 40)
+    try:
+        run_scan()
+        log("کامل شد.")
+    except Exception as e:
+        log(f"خطای کلی: {e}")
