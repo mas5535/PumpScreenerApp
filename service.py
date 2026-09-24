@@ -309,7 +309,6 @@ def get_order_book_pressure(symbol):
         
 def generate_token_analysis(token):
     symbol = token["symbol"]
-        log(f"🔍 DEBUG {symbol}: در حال دریافت داده‌های پیشرفته...")
     score = token["pump_score"]
     details = token.get("details", {})
     lines = []
