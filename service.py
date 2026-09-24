@@ -1,9 +1,8 @@
 """
-سرویس پس‌زمینه اسکنر پامپ — نسخه اصلاح‌شده
+سرویس اسکنر پامپ — نسخه نهایی و تمیز
 """
 
 import os
-import json
 import time
 import statistics
 import requests
@@ -12,19 +11,18 @@ from datetime import datetime
 
 def log(message):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    line = f"[{timestamp}] {message}"
-    print(line)
+    print(f"[{timestamp}] {message}")
 
 
 def load_config():
-    """خواندن تنظیمات از Environment Variables"""
-    token = os.environ.get("TELEGRAM_TOKEN", "")
-    chat_id = os.environ.get("TELEGRAM_CHAT_ID", "")
-    return {"telegram_token": token, "chat_id": chat_id}
+    return {
+        "telegram_token": os.environ.get("TELEGRAM_TOKEN", ""),
+        "chat_id": os.environ.get("TELEGRAM_CHAT_ID", ""),
+    }
 
 
 # ============================================================
-# دریافت داده از CoinGecko
+# دریافت داده
 # ============================================================
 class MarketDataFetcher:
     BASE_URL = "https://api.coingecko.com/api/v3"
@@ -33,26 +31,18 @@ class MarketDataFetcher:
         self.session = requests.Session()
         self.session.headers.update({"User-Agent": "PumpScreener/1.0"})
 
-    def _get_with_retry(self, url, params, max_retries=3):
-        """درخواست با تلاش مجدد در صورت خطا"""
-        for attempt in range(max_retries):
-            try:
+    def _get(self, url, params):
+        try:
+            resp = self.session.get(url, params=params, timeout=30)
+            if resp.status_code == 429:
+                log("⏳ Rate limit — صبر ۱۰ ثانیه")
+                time.sleep(10)
                 resp = self.session.get(url, params=params, timeout=30)
-                if resp.status_code == 429:  # Too Many Requests
-                    wait = 10 * (attempt + 1)
-                    log(f"⏳ Rate limit — صبر {wait} ثانیه...")
-                    time.sleep(wait)
-                    continue
-                resp.raise_for_status()
-                return resp.json()
-            except Exception as e:
-                if attempt < max_retries - 1:
-                    log(f"⚠️ تلاش {attempt+1} ناموفق: {e}")
-                    time.sleep(5)
-                else:
-                    log(f"❌ همه تلاش‌ها ناموفق: {e}")
-                    return None
-        return None
+            resp.raise_for_status()
+            return resp.json()
+        except Exception as e:
+            log(f"❌ خطا در درخواست: {e}")
+            return None
 
     def get_top_coins(self, limit=50):
         url = f"{self.BASE_URL}/coins/markets"
@@ -64,13 +54,13 @@ class MarketDataFetcher:
             "sparkline": False,
             "price_change_percentage": "1h,24h,7d",
         }
-        data = self._get_with_retry(url, params)
+        data = self._get(url, params)
         return data if data else []
 
     def get_market_chart(self, coin_id, days=14):
         url = f"{self.BASE_URL}/coins/{coin_id}/market_chart"
         params = {"vs_currency": "usd", "days": days}
-        data = self._get_with_retry(url, params)
+        data = self._get(url, params)
         if not data:
             return {"prices": [], "volumes": []}
         prices = [p[1] for p in data.get("prices", [])]
@@ -84,8 +74,7 @@ class MarketDataFetcher:
 def calculate_rsi(prices, period=14):
     if len(prices) < period + 1:
         return 50
-    gains = []
-    losses = []
+    gains, losses = [], []
     for i in range(1, len(prices)):
         diff = prices[i] - prices[i - 1]
         if diff > 0:
@@ -242,263 +231,7 @@ def score_onchain(coin):
 # ============================================================
 # ارسال تلگرام
 # ============================================================
-def generate_token_analysis(token):
-    """تولید تحلیل متنی مفصل برای یک توکن"""
-    symbol = token["symbol"]
-    name = token.get("name", symbol)
-    score = token["pump_score"]
-    tech = token["technical_score"]
-    onchain = token["onchain_score"]
-    price = token["price"]
-    change = token["change_24h"]
-    details = token.get("details", {})
-
-    lines = []
-
-    # سطح سیگنال
-    if score >= 60:
-        level = "🟢 سیگنال قوی — فرصت بررسی"
-    elif score >= 40:
-        level = "🟡 سیگنال متوسط — نیاز به صبر"
-    elif score >= 20:
-        level = "🟠 سیگنال ضعیف — فقط رصد"
-    else:
-        level = "🔴 بدون سیگنال — صبر کنید"
-
-    lines.append(f"<b>{symbol}</b> ({name})")
-    lines.append(f"{level}")
-    lines.append(f"💵 قیمت: ${price:.6f} | تغییر ۲۴h: {change:+.2f}%")
-    lines.append(f"🎯 امتیاز کل: <b>{score}/100</b>")
-    lines.append(f"   • امتیاز تکنیکال: {tech}/100")
-    lines.append(f"   • امتیاز آن‌چین: {onchain}/100")
-    lines.append("")
-
-    strengths = []
-    weaknesses = []
-    insights = []
-
-    # حجم
-    vol = details.get("volume", "")
-    if "قوی" in vol:
-        strengths.append(f"📊 {vol} — ورود پول قوی به بازار")
-    elif "خوب" in vol:
-        strengths.append(f"📊 {vol} — افزایش علاقه خریداران")
-    elif "خفیف" in vol:
-        insights.append(f"📊 {vol} — فعالیت کمی بیشتر از حد معمول")
-    else:
-        weaknesses.append(f"📊 {vol} — حجم معاملات معمولی، بدون هیجان")
-
-    # RSI
-    rsi = details.get("rsi", "")
-    if "اشباع فروش" in rsi:
-        strengths.append(f"📈 {rsi} — قیمت بیش از حد پایین، احتمال برگشت بالا")
-    elif "محدوده پامپ" in rsi:
-        strengths.append(f"📈 {rsi} — مومنتوم صعودی فعال")
-    else:
-        insights.append(f"📈 {rsi} — در محدوده خنثی")
-
-    # باند بولینگر
-    bb = details.get("bb", "")
-    if "فشردگی" in bb:
-        strengths.append(f"📉 {bb} — فشردگی شدید، شکست قریب‌الوقوع")
-    elif "باریک" in bb:
-        strengths.append(f"📉 {bb} — باند در حال تنگ شدن")
-    elif "باز" in bb:
-        weaknesses.append(f"📉 {bb} — نوسان بالا، ریسک زیاد")
-
-    # MACD
-    macd = details.get("macd", "")
-    if "صعودی" in macd or "کراس" in macd:
-        strengths.append(f"📊 {macd} — تغییر مومنتوم به صعودی")
-    elif "نزولی" in macd:
-        weaknesses.append(f"📊 {macd} — مومنتوم نزولی")
-
-    # نسبت حجم/مارکت‌کپ
-    vm = details.get("vol_mcap", "")
-    if "غیرعادی" in vm:
-        strengths.append(f"🐋 {vm} — احتمال فعالیت نهنگ‌ها")
-    elif "بالا" in vm:
-        strengths.append(f"🐋 {vm} — نسبت حجم به مارکت‌کپ قابل توجه")
-
-    # شتاب قیمت
-    mom = details.get("momentum", "")
-    if "بسیار بالا" in mom:
-        strengths.append(f"🚀 {mom} — شتاب قیمت بسیار قوی")
-    elif "بالا" in mom:
-        strengths.append(f"🚀 {mom} — شتاب قیمت بالا")
-    elif "متوسط" in mom:
-        insights.append(f"🚀 {mom} — شتاب متوسط")
-
-    # چاپ
-    if strengths:
-        lines.append("✅ <b>نقاط قوت:</b>")
-        for s in strengths:
-            lines.append(f"   {s}")
-    if insights:
-        lines.append("🔍 <b>نکات قابل توجه:</b>")
-        for i in insights:
-            lines.append(f"   {i}")
-    if weaknesses:
-        lines.append("⚠️ <b>نقاط ضعف:</b>")
-        for w in weaknesses:
-            lines.append(f"   {w}")
-
-    # جمع‌بندی نهایی
-    lines.append("")
-    if score >= 60:
-        lines.append("🎯 <b>پیشنهاد: بررسی جدی برای ورود</b>")
-        lines.append("   (حد ضرر ۵٪ زیر قیمت فعلی)")
-    elif score >= 40:
-        lines.append("🎯 <b>پیشنهاد: در لیست رصد قرار دهید</b>")
-        lines.append("   (منتظر تاییدیه سیگنال بمانید)")
-    elif score >= 20:
-        lines.append("🎯 <b>پیشنهاد: فعلاً ورود نکنید</b>")
-        lines.append("   (سیگنال کافی نیست)")
-    else:
-        lines.append("🎯 <b>پیشنهاد: صبر کنید</b>")
-        lines.append("   (بدون سیگنال)")
-
-    return "\n".join(lines)
-def split_message(text, max_length=3800):
-    """تقسیم پیام طولانی به چند بخش"""
-    if len(text) <= max_length:
-        return [text]
-    
-    parts = []
-    current = ""
-    for line in text.split("\n"):
-        if len(current) + len(line) + 1 > max_length:
-            parts.append(current)
-            current = line
-        else:
-            current += "\n" + line if current else line
-    
-    if current:
-        parts.append(current)
-    
-    return parts
-
-
-def send_single_message(token, chat_id, text):
-    """ارسال یک پیام ساده"""
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
-    payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
-    try:
-        resp = requests.post(url, json=payload, timeout=15)
-        resp.raise_for_status()
-        return True
-    except Exception as e:
-        log(f"❌ خطا در ارسال: {e}")
-        return False
-
-
 def send_telegram(token, chat_id, alerts, top5):
-    if not token or not chat_id:
-        log("⚠️ توکن یا chat_id تنظیم نشده.")
-        return False
-
-    date_str = datetime.now().strftime('%Y-%m-%d %H:%M')
-
-    # ---------- پیام اول: هشدارها ----------
-    if alerts:
-        header = (f"🚨 <b>هشدار پامپ — {date_str}</b>\n"
-                  f"تعداد: <b>{len(alerts)}</b> توکن با امتیاز بالای ۶۰")
-        send_single_message(token, chat_id, header)
-        time.sleep(1)
-
-        for i, a in enumerate(alerts[:10], 1):
-            msg = f"<b>🚨 هشدار #{i}</b>\n\n" + generate_token_analysis(a)
-            send_single_message(token, chat_id, msg)
-            time.sleep(1)
-    else:
-        msg = (f"ℹ️ <b>گزارش {date_str}</b>\n"
-               f"امروز توکنی با امتیاز بالای ۶۰ شناسایی نشد.")
-        send_single_message(token, chat_id, msg)
-        time.sleep(1)
-
-    # ---------- پیام دوم: ۵ توکن برتر (هر کدام جداگانه) ----------
-    if not top5:
-        log("⚠️ لیست top5 خالی است.")
-        return True
-
-    log(f"📤 ارسال {len(top5)} توکن برتر...")
-
-    header = (f"🏆 <b>۵ توکن برتر امروز — {date_str}</b>\n"
-              f"تعداد: {len(top5)} توکن")
-    send_single_message(token, chat_id, header)
-    time.sleep(1)
-
-    for i, a in enumerate(top5, 1):
-        symbol = a.get("symbol", "?")
-        score = a.get("pump_score", 0)
-        msg = f"<b>🏆 رتبه #{i} — {symbol}</b> (امتیاز {score}/100)\n\n"
-        msg += generate_token_analysis(a)
-        log(f"  ارسال #{i} {symbol} — طول: {len(msg)} کاراکتر")
-        success = send_single_message(token, chat_id, msg)
-        log(f"  نتیجه: {'✅ موفق' if success else '❌ ناموفق'}")
-        time.sleep(2)  # ۲ ثانیه صبر بین پیام‌ها
-
-    log("✅ همه پیام‌ها ارسال شد.")
-    return True
-
-
-# ============================================================
-# اجرای اسکن
-# ============================================================
-def run_scan():
-    config = load_config()
-    token = config.get("telegram_token", "")
-    chat_id = config.get("chat_id", "")
-
-    log("🔍 شروع اسکن...")
-    fetcher = MarketDataFetcher()
-    coins = fetcher.get_top_coins(limit=80)
-    coins = [c for c in coins if (c.get("total_volume") or 0) > 5_000_000]
-
-    if not coins:
-        log("❌ دریافت داده ناموفق.")
-        return []
-
-    log(f"✅ {len(coins)} توکن دریافت شد.")
-    results = []
-
-    for i, coin in enumerate(coins):
-        try:
-            coin_id = coin.get("id", "")
-            symbol = (coin.get("symbol") or "?").upper()
-            if i % 10 == 0:
-                log(f"  تحلیل {i + 1}/{len(coins)}: {symbol}")
-
-            chart = fetcher.get_market_chart(coin_id, days=14)
-            if not chart.get("prices"):
-                continue
-
-            tech_score, tech_details = score_technical(chart)
-            onchain_score, onchain_details = score_onchain(coin)
-            final_score = tech_score * 0.55 + onchain_score * 0.45
-
-            results.append({
-                "symbol": symbol,
-                "name": coin.get("name", symbol),
-                "pump_score": round(final_score, 1),
-                "technical_score": round(tech_score, 1),
-                "onchain_score": round(onchain_score, 1),
-                "price": coin.get("current_price") or 0,
-                "market_cap": coin.get("market_cap") or 0,
-                "volume_24h": coin.get("total_volume") or 0,
-                "change_24h": coin.get("price_change_percentage_24h_in_currency") or 0,
-                "details": {**tech_details, **onchain_details},
-            })
-            time.sleep(1.5)
-        except Exception as e:
-            log(f"⚠️ خطا در تحلیل توکن {i + 1}: {e}")
-            continue
-
-    results.sort(key=lambda x: x["pump_score"], reverse=True)
-    alerts = [r for r in results if r["pump_score"] >= 60]
-    log(f"📊 {len(alerts)} توکن با امتیاز بالای ۶۰.")
-    top5 = results[:5]
-    def send_telegram(token, chat_id, alerts, top5):
     if not token or not chat_id:
         log("⚠️ توکن یا chat_id تنظیم نشده.")
         return False
@@ -508,19 +241,20 @@ def run_scan():
 
     if alerts:
         lines.append(f"🚨 <b>هشدار پامپ: {len(alerts)} توکن با امتیاز بالای ۶۰</b>\n")
-        for i, a in enumerate(alerts[:10], 1):
-            lines.append(f"#{i} {a['symbol']} — امتیاز {a['pump_score']}/100")
     else:
         lines.append("ℹ️ <b>امروز توکنی با امتیاز بالای ۶۰ شناسایی نشد.</b>\n")
 
-    lines.append("═" * 20)
-    lines.append("🏆 <b>۵ توکن برتر امروز</b>\n")
+    lines.append("═" * 15)
+    lines.append(f"🏆 <b>{len(top5)} توکن برتر امروز</b>\n")
 
     for i, a in enumerate(top5, 1):
-        lines.append(f"<b>#{i} {a['symbol']}</b> — امتیاز {a['pump_score']}/100")
-        lines.append(f"قیمت: ${a['price']:.6f} | تغییر: {a['change_24h']:+.2f}%\n")
+        lines.append(f"<b>#{i} {a['symbol']}</b> — امتیاز: <b>{a['pump_score']}/100</b>")
+        lines.append(f"💰 ${a['price']:.6f} | 📈 {a['change_24h']:+.2f}%")
+        for d in a.get("details", {}).values():
+            lines.append(f"   • {d}")
+        lines.append("")
 
-    lines.append("⚠️ <i>این تحلیل قطعی نیست.</i>")
+    lines.append("⚠️ <i>این تحلیل قطعی نیست. مدیریت ریسک الزامی است.</i>")
     msg = "\n".join(lines)
 
     url = f"https://api.telegram.org/bot{token}/sendMessage"
@@ -536,13 +270,67 @@ def run_scan():
 
 
 # ============================================================
-# اجرای اصلی (برای Tasks - فقط یک بار اجرا می‌شود)
+# اجرای اسکن
+# ============================================================
+def run_scan():
+    config = load_config()
+    token = config.get("telegram_token", "")
+    chat_id = config.get("chat_id", "")
+
+    log("🔍 شروع اسکن...")
+    fetcher = MarketDataFetcher()
+    coins = fetcher.get_top_coins(limit=50)
+
+    if not coins:
+        log("❌ دریافت داده ناموفق.")
+        return []
+
+    log(f"✅ {len(coins)} توکن دریافت شد.")
+    results = []
+
+    for i, coin in enumerate(coins):
+        try:
+            coin_id = coin.get("id", "")
+            symbol = (coin.get("symbol") or "?").upper()
+            chart = fetcher.get_market_chart(coin_id, days=14)
+            if not chart.get("prices"):
+                continue
+
+            tech_score, tech_details = score_technical(chart)
+            onchain_score, onchain_details = score_onchain(coin)
+            final_score = tech_score * 0.55 + onchain_score * 0.45
+
+            results.append({
+                "symbol": symbol,
+                "name": coin.get("name", symbol),
+                "pump_score": round(final_score, 1),
+                "price": coin.get("current_price") or 0,
+                "change_24h": coin.get("price_change_percentage_24h_in_currency") or 0,
+                "details": {**tech_details, **onchain_details},
+            })
+            time.sleep(1.0)
+        except Exception as e:
+            log(f"⚠️ خطا در {i + 1}: {e}")
+            continue
+
+    log(f"📊 تعداد نتایج: {len(results)}")
+    results.sort(key=lambda x: x["pump_score"], reverse=True)
+    alerts = [r for r in results if r["pump_score"] >= 60]
+    top5 = results[:5]
+    log(f"📊 top5: {len(top5)} توکن")
+
+    send_telegram(token, chat_id, alerts, top5)
+    return alerts
+
+
+# ============================================================
+# اجرای اصلی
 # ============================================================
 if __name__ == "__main__":
-    log("=" * 50)
+    log("=" * 40)
     log("🚀 اسکن شروع شد.")
     try:
         run_scan()
-        log("✅ اسکن با موفقیت کامل شد.")
+        log("✅ کامل شد.")
     except Exception as e:
         log(f"❌ خطای کلی: {e}")
