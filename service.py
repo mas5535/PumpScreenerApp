@@ -9,6 +9,35 @@ import time
 import statistics
 import requests
 from datetime import datetime
+# ============================================================
+# State — جلوگیری از ارسال تکراری
+# ============================================================
+STATE_FILE = "alerted.json"
+
+
+def load_state():
+    today = datetime.now().strftime("%Y-%m-%d")
+    try:
+        if os.path.exists(STATE_FILE):
+            import json
+            with open(STATE_FILE, "r") as f:
+                data = json.load(f)
+            if data.get("date") == today:
+                return set(data.get("alerted", []))
+    except Exception:
+        pass
+    return set()
+
+
+def save_state(alerted_set):
+    import json
+    data = {
+        "date": datetime.now().strftime("%Y-%m-%d"),
+        "alerted": list(alerted_set),
+        "updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    }
+    with open(STATE_FILE, "w") as f:
+        json.dump(data, f)
 
 
 def log(message):
@@ -704,28 +733,35 @@ def _send_one(token, chat_id, text):
         return False
 
 
-def send_telegram(token, chat_id, alerts, top5):
+def send_telegram(token, chat_id, alerts, alerted_set):
+    """ارسال هشدار فقط برای توکن‌های جدید"""
     if not token or not chat_id:
         log("توکن یا chat_id تنظیم نشده.")
         return False
 
+    # فقط توکن‌های جدید
+    new_alerts = [a for a in alerts if a["symbol"] not in alerted_set]
+
+    if not new_alerts:
+        log("هیچ هشدار جدیدی نیست.")
+        return True
+
     date_str = datetime.now().strftime('%Y-%m-%d %H:%M')
 
-    if alerts:
-        header = f"🚨 <b>هشدار پامپ — {date_str}</b>\nتعداد: <b>{len(alerts)}</b> توکن"
-        _send_one(token, chat_id, header)
-        time.sleep(2)
-        for i, a in enumerate(alerts[:10], 1):
-            msg = f"<b>🚨 هشدار #{i} — {a['symbol']}</b>\n\n" + generate_token_analysis(a)
-            _send_one(token, chat_id, msg)
-            time.sleep(3)
-    else:
-        msg = f"ℹ️ <b>گزارش {date_str}</b>\nامروز توکنی با امتیاز بالای ۷۰ نیست."
-        _send_one(token, chat_id, msg)
-        time.sleep(2)
+    header = f"🚨 <b>هشدار پامپ — {date_str}</b>\nتعداد: <b>{len(new_alerts)}</b> توکن"
+    _send_one(token, chat_id, header)
+    time.sleep(2)
 
-    if not top5:
-        return True
+    for i, a in enumerate(new_alerts[:5], 1):
+        msg = f"<b>🚨 هشدار #{i} — {a['symbol']}</b> (امتیاز {a['pump_score']}/100)\n"
+        msg += f"💵 ${a['price']:.6f} | 📈 {a['change_24h']:+.2f}%\n\n"
+        msg += generate_token_analysis(a)
+        _send_one(token, chat_id, msg)
+        time.sleep(3)
+        alerted_set.add(a["symbol"])
+
+    log(f"{len(new_alerts)} هشدار جدید ارسال شد.")
+    return True
 
     header = f"🏆 <b>۵ توکن برتر — {date_str}</b>"
     _send_one(token, chat_id, header)
@@ -750,9 +786,11 @@ def run_scan():
     token = config.get("telegram_token", "")
     chat_id = config.get("chat_id", "")
 
-    log("شروع اسکن...")
+    alerted_set = load_state()
+    log(f"شروع اسکن... (هشدارهای امروز: {len(alerted_set)})")
+
     fetcher = MarketDataFetcher()
-    coins = fetcher.get_top_coins(limit=30)
+    coins = fetcher.get_top_coins(limit=25)
 
     if not coins:
         log("دریافت داده ناموفق.")
@@ -765,6 +803,10 @@ def run_scan():
         try:
             coin_id = coin.get("id", "")
             symbol = (coin.get("symbol") or "?").upper()
+
+            if symbol in alerted_set:
+                continue
+
             chart = fetcher.get_market_chart(coin_id, days=30)
             if not chart.get("prices"):
                 continue
@@ -772,6 +814,10 @@ def run_scan():
             tech_score, tech_details = score_technical(chart)
             onchain_score, onchain_details = score_onchain(coin)
             final_score = tech_score * 0.55 + onchain_score * 0.45
+
+            # فقط امتیاز ۷۰ به بالا
+            if final_score < 70:
+                continue
 
             results.append({
                 "symbol": symbol,
@@ -786,20 +832,14 @@ def run_scan():
             log(f"خطا در {i + 1}: {e}")
             continue
 
-    log(f"تعداد نتایج: {len(results)}")
-    results.sort(key=lambda x: x["pump_score"], reverse=True)
-    alerts = [r for r in results if r["pump_score"] >= 70]
-    top5 = results[:5]
+    log(f"توکن‌های مستعد پامپ: {len(results)}")
 
-    send_telegram(token, chat_id, alerts, top5)
-    return alerts
+    # فقط اگر توکن مستعد وجود داشت، پیام بفرست
+    if results:
+        results.sort(key=lambda x: x["pump_score"], reverse=True)
+        send_telegram(token, chat_id, results, alerted_set)
+        save_state(alerted_set)
+    else:
+        log("هیچ توکنی مستعد پامپ نیست. پیامی ارسال نشد.")
 
-
-if __name__ == "__main__":
-    log("=" * 40)
-    log("اسکن شروع شد.")
-    try:
-        run_scan()
-        log("کامل شد.")
-    except Exception as e:
-        log(f"خطای کلی: {e}")
+    return results
