@@ -426,7 +426,6 @@ def generate_token_analysis(token):
     else:
         lines.append("🎯 <b>پیشنهاد: صبر کنید</b>")
 
-    log(f"🔍 DEBUG {symbol}: funding={deriv.get('funding_rate')}, oi={deriv.get('open_interest')}, ob={ob}")
     return "\n".join(lines)
     
 def send_telegram(token, chat_id, alerts, top5):
