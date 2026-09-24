@@ -229,18 +229,21 @@ def score_onchain(coin):
 # ============================================================
 # ارسال تلگرام
 # ============================================================
-def send_telegram(token, chat_id, alerts):
+def send_telegram(token, chat_id, alerts, top5):
+    """
+    alerts: توکن‌های با امتیاز بالای ۶۰ (ممکن است خالی باشد)
+    top5: همیشه ۵ توکن برتر (حتی با امتیاز پایین)
+    """
     if not token or not chat_id:
         log("⚠️ توکن یا chat_id تنظیم نشده.")
         return False
 
-    if not alerts:
-        msg = "ℹ️ اسکن روزانه: هیچ توکنی با امتیاز بالا شناسایی نشد."
-    else:
-        lines = [
-            f"🚨 <b>هشدار پامپ — {datetime.now().strftime('%Y-%m-%d %H:%M')}</b>",
-            f"تعداد: <b>{len(alerts)}</b> توکن\n",
-        ]
+    date_str = datetime.now().strftime('%Y-%m-%d %H:%M')
+    lines = [f"📊 <b>گزارش اسکن — {date_str}</b>\n"]
+
+    # بخش ۱: هشدارهای قوی (امتیاز ۶۰+)
+    if alerts:
+        lines.append(f"🚨 <b>هشدار پامپ: {len(alerts)} توکن با امتیاز بالای ۶۰</b>\n")
         for i, a in enumerate(alerts[:10], 1):
             emoji = "🔴" if a["pump_score"] >= 85 else "🟠" if a["pump_score"] >= 70 else "🟡"
             lines.append(f"{emoji} <b>#{i} {a['symbol']}</b> — امتیاز: <b>{a['pump_score']}/100</b>")
@@ -249,8 +252,22 @@ def send_telegram(token, chat_id, alerts):
             for d in a.get("details", {}).values():
                 lines.append(f"   • {d}")
             lines.append("")
-        lines.append("⚠️ <i>این هشدار پیش‌بینی قطعی نیست.</i>")
-        msg = "\n".join(lines)
+    else:
+        lines.append("ℹ️ <b>امروز توکنی با امتیاز بالای ۶۰ شناسایی نشد.</b>\n")
+
+    # بخش ۲: همیشه ۵ توکن برتر (حتی با امتیاز پایین)
+    lines.append("═" * 20)
+    lines.append(f"🏆 <b>۵ توکن برتر امروز (مستعد پامپ)</b>\n")
+    for i, a in enumerate(top5, 1):
+        lines.append(f"<b>#{i} {a['symbol']}</b> — امتیاز: <b>{a['pump_score']}/100</b>")
+        lines.append(f"   💰 ${a['price']:.6f}")
+        lines.append(f"   📈 {a['change_24h']:+.2f}%")
+        for d in a.get("details", {}).values():
+            lines.append(f"   • {d}")
+        lines.append("")
+
+    lines.append("⚠️ <i>این هشدار پیش‌بینی قطعی نیست. مدیریت ریسک الزامی است.</i>")
+    msg = "\n".join(lines)
 
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     payload = {"chat_id": chat_id, "text": msg, "parse_mode": "HTML"}
@@ -317,9 +334,10 @@ def run_scan():
             continue
 
     results.sort(key=lambda x: x["pump_score"], reverse=True)
-    alerts = [r for r in results if r["pump_score"] >= 70]
+    alerts = [r for r in results if r["pump_score"] >= 60]
     log(f"📊 {len(alerts)} توکن با امتیاز بالای ۶۰.")
-    send_telegram(token, chat_id, alerts)
+        top5 = results[:5]
+    send_telegram(token, chat_id, alerts, top5)
     return alerts
 
 
