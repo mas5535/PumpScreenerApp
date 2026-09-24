@@ -816,7 +816,7 @@ def run_scan():
             final_score = tech_score * 0.55 + onchain_score * 0.45
 
             # فقط امتیاز ۷۰ به بالا
-            if final_score < 70:
+            if final_score < 60:
                 continue
 
             results.append({
