@@ -731,7 +731,7 @@ def run_scan():
     # ساعت ۴ UTC = ۸ صبح ایران
     current_hour_utc = datetime.utcnow().hour
     current_date = datetime.now().strftime("%Y-%m-%d")
-    should_send_daily = (current_hour_utc == 4) and (state["daily_sent"] != current_date)
+    should_send_daily = (current_hour_utc >= 4) and (state["daily_sent"] != current_date)
 
     log(f"شروع اسکن... (هشدارهای امروز: {len(alerted_set)}, ساعت UTC: {current_hour_utc})")
 
