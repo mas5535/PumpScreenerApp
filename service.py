@@ -33,7 +33,28 @@ class MarketDataFetcher:
         self.session = requests.Session()
         self.session.headers.update({"User-Agent": "PumpScreener/1.0"})
 
-    def get_top_coins(self, limit=80):
+    def _get_with_retry(self, url, params, max_retries=3):
+        """درخواست با تلاش مجدد در صورت خطا"""
+        for attempt in range(max_retries):
+            try:
+                resp = self.session.get(url, params=params, timeout=30)
+                if resp.status_code == 429:  # Too Many Requests
+                    wait = 10 * (attempt + 1)
+                    log(f"⏳ Rate limit — صبر {wait} ثانیه...")
+                    time.sleep(wait)
+                    continue
+                resp.raise_for_status()
+                return resp.json()
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    log(f"⚠️ تلاش {attempt+1} ناموفق: {e}")
+                    time.sleep(5)
+                else:
+                    log(f"❌ همه تلاش‌ها ناموفق: {e}")
+                    return None
+        return None
+
+    def get_top_coins(self, limit=50):
         url = f"{self.BASE_URL}/coins/markets"
         params = {
             "vs_currency": "usd",
@@ -43,26 +64,18 @@ class MarketDataFetcher:
             "sparkline": False,
             "price_change_percentage": "1h,24h,7d",
         }
-        try:
-            resp = self.session.get(url, params=params, timeout=30)
-            resp.raise_for_status()
-            return resp.json()
-        except Exception as e:
-            log(f"خطا در دریافت داده: {e}")
-            return []
+        data = self._get_with_retry(url, params)
+        return data if data else []
 
     def get_market_chart(self, coin_id, days=14):
         url = f"{self.BASE_URL}/coins/{coin_id}/market_chart"
         params = {"vs_currency": "usd", "days": days}
-        try:
-            resp = self.session.get(url, params=params, timeout=30)
-            resp.raise_for_status()
-            data = resp.json()
-            prices = [p[1] for p in data.get("prices", [])]
-            volumes = [v[1] for v in data.get("total_volumes", [])]
-            return {"prices": prices, "volumes": volumes}
-        except Exception:
+        data = self._get_with_retry(url, params)
+        if not data:
             return {"prices": [], "volumes": []}
+        prices = [p[1] for p in data.get("prices", [])]
+        volumes = [v[1] for v in data.get("total_volumes", [])]
+        return {"prices": prices, "volumes": volumes}
 
 
 # ============================================================
@@ -439,7 +452,7 @@ def run_scan():
 
     log("🔍 شروع اسکن...")
     fetcher = MarketDataFetcher()
-    coins = fetcher.get_top_coins(limit=250)
+    coins = fetcher.get_top_coins(limit=80)
     coins = [c for c in coins if (c.get("total_volume") or 0) > 5_000_000]
 
     if not coins:
@@ -476,7 +489,7 @@ def run_scan():
                 "change_24h": coin.get("price_change_percentage_24h_in_currency") or 0,
                 "details": {**tech_details, **onchain_details},
             })
-            time.sleep(0.3)
+            time.sleep(1.5)
         except Exception as e:
             log(f"⚠️ خطا در تحلیل توکن {i + 1}: {e}")
             continue
@@ -485,6 +498,10 @@ def run_scan():
     alerts = [r for r in results if r["pump_score"] >= 60]
     log(f"📊 {len(alerts)} توکن با امتیاز بالای ۶۰.")
     top5 = results[:5]
+        log(f"🔍 DEBUG: تعداد نتایج = {len(results)}")
+    log(f"🔍 DEBUG: تعداد top5 = {len(top5)}")
+    for i, t in enumerate(top5):
+        log(f"  #{i+1}: {t['symbol']} — امتیاز {t['pump_score']}")
     send_telegram(token, chat_id, alerts, top5)
     return alerts
 
