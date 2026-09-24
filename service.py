@@ -336,7 +336,7 @@ def run_scan():
     results.sort(key=lambda x: x["pump_score"], reverse=True)
     alerts = [r for r in results if r["pump_score"] >= 60]
     log(f"📊 {len(alerts)} توکن با امتیاز بالای ۶۰.")
-        top5 = results[:5]
+    top5 = results[:5]
     send_telegram(token, chat_id, alerts, top5)
     return alerts
 
