@@ -268,6 +268,44 @@ def get_binance_derivatives(symbol):
         return result
     except Exception:
         return {"funding_rate": None, "open_interest": None}
+
+def get_order_book_pressure(symbol):
+    """تحلیل عمق بازار و فشار خرید/فروش"""
+    try:
+        url = "https://api.binance.com/api/v3/depth"
+        resp = requests.get(
+            url,
+            params={"symbol": f"{symbol}USDT", "limit": 100},
+            timeout=10
+        )
+        if resp.status_code != 200:
+            return None
+
+        data = resp.json()
+        bids = [(float(p), float(q)) for p, q in data.get("bids", [])]
+        asks = [(float(p), float(q)) for p, q in data.get("asks", [])]
+
+        # سفارش‌های بزرگ (بالای ۱۰ برابر میانگین)
+        if not bids or not asks:
+            return None
+
+        avg_bid_qty = sum(q for _, q in bids) / len(bids)
+        avg_ask_qty = sum(q for _, q in asks) / len(asks)
+
+        big_bids = [q for _, q in bids if q > avg_bid_qty * 10]
+        big_asks = [q for _, q in asks if q > avg_ask_qty * 10]
+
+        total_bid = sum(q for _, q in bids)
+        total_ask = sum(q for _, q in asks)
+        ratio = total_bid / total_ask if total_ask > 0 else 0
+
+        return {
+            "buy_sell_ratio": ratio,
+            "big_bids": len(big_bids),
+            "big_asks": len(big_asks),
+        }
+    except Exception:
+        return None
         
 def generate_token_analysis(token):
     symbol = token["symbol"]
@@ -336,6 +374,23 @@ def generate_token_analysis(token):
         for w in weaknesses:
             lines.append(f"   • {w}")
 
+        # --- تحلیل عمق بازار ---
+    ob = get_order_book_pressure(symbol)
+    if ob:
+        ratio = ob["buy_sell_ratio"]
+        ob_lines = [f"📋 نسبت خرید/فروش: {ratio:.2f}"]
+        if ratio > 1.5:
+            ob_lines.append(f"   ✅ سفارش‌های خرید قوی ({ob['big_bids']} سفارش بزرگ)")
+            strengths.append(f"📋 فشار خرید بالا (نسبت {ratio:.2f})")
+        elif ratio < 0.7:
+            ob_lines.append(f"   ⚠️ سفارش‌های فروش قوی ({ob['big_asks']} سفارش بزرگ)")
+            weaknesses.append(f"📋 فشار فروش بالا (نسبت {ratio:.2f})")
+        else:
+            ob_lines.append("   🔍 تعادل بین خرید و فروش")
+        lines.append("📋 <b>عمق بازار:</b>")
+        for ol in ob_lines:
+            lines.append(f"   {ol}")
+            
         # --- تحلیل بازار فیوچرز ---
     symbol = token["symbol"]
     deriv = get_binance_derivatives(symbol)
