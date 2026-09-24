@@ -27,7 +27,15 @@ jobs:
 
       - name: Install requests
         run: pip install requests
-
+      - name: Check syntax
+        run: |
+          echo "=== Checking service.py ==="
+          python -m py_compile service.py && echo "OK" || echo "SYNTAX ERROR"
+          echo "=== Functions ==="
+          grep -n "def send_daily_top5" service.py || echo "send_daily_top5 MISSING"
+          grep -n "def load_state" service.py || echo "load_state MISSING"
+          grep -n "def save_state" service.py || echo "save_state MISSING"
+          grep -n "daily_sent" service.py || echo "daily_sent MISSING"
       - name: Run Screener
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
