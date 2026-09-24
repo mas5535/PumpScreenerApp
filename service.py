@@ -309,6 +309,7 @@ def get_order_book_pressure(symbol):
         
 def generate_token_analysis(token):
     symbol = token["symbol"]
+        log(f"🔍 DEBUG {symbol}: در حال دریافت داده‌های پیشرفته...")
     score = token["pump_score"]
     details = token.get("details", {})
     lines = []
@@ -425,6 +426,7 @@ def generate_token_analysis(token):
     else:
         lines.append("🎯 <b>پیشنهاد: صبر کنید</b>")
 
+    log(f"🔍 DEBUG {symbol}: funding={deriv.get('funding_rate')}, oi={deriv.get('open_interest')}, ob={ob}")
     return "\n".join(lines)
     
 def send_telegram(token, chat_id, alerts, top5):
