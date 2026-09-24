@@ -500,6 +500,27 @@ def score_onchain(coin):
 
     return min(score, 100), details
 
+def get_whale_activity(symbol):
+    """دریافت تراکنش‌های بزرگ از CryptoWhaleInsights (بدون API Key)"""
+    try:
+        url = "https://api.cryptowhaleinsights.com/v1/whales/recent"
+        r = requests.get(url, timeout=10)
+        if r.status_code == 200:
+            data = r.json()
+            transactions = data.get("data", [])
+            related = [t for t in transactions 
+                      if symbol.upper() in str(t.get("symbol", "")).upper()]
+            if related:
+                total_usd = sum(float(t.get("value_usd", 0)) for t in related)
+                return {
+                    "count": len(related),
+                    "total_usd": total_usd,
+                    "latest": float(related[0].get("value_usd", 0)),
+                }
+    except Exception:
+        pass
+    return None
+
 
 # ============================================================
 # تولید تحلیل کامل
