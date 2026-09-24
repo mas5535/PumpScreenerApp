@@ -23,21 +23,25 @@ def load_state():
             with open(STATE_FILE, "r") as f:
                 data = json.load(f)
             if data.get("date") == today:
-                return set(data.get("alerted", []))
+                return {
+                    "alerted": set(data.get("alerted", [])),
+                    "daily_sent": data.get("daily_sent", ""),
+                }
     except Exception:
         pass
-    return set()
+    return {"alerted": set(), "daily_sent": ""}
 
 
-def save_state(alerted_set):
+def save_state(state):
     import json
     data = {
         "date": datetime.now().strftime("%Y-%m-%d"),
-        "alerted": list(alerted_set),
+        "alerted": list(state["alerted"]),
+        "daily_sent": state.get("daily_sent", ""),
         "updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
     with open(STATE_FILE, "w") as f:
-        json.dump(data, f)
+        json.dump(data, f))
 
 
 def log(message):
@@ -786,8 +790,17 @@ def run_scan():
     token = config.get("telegram_token", "")
     chat_id = config.get("chat_id", "")
 
-    alerted_set = load_state()
-    log(f"شروع اسکن... (هشدارهای امروز: {len(alerted_set)})")
+    state = load_state()
+    alerted_set = state["alerted"]
+
+    # ساعت فعلی UTC (ایران = UTC+3:30)
+    current_hour_utc = datetime.utcnow().hour
+    current_date = datetime.now().strftime("%Y-%m-%d")
+
+    # ارسال روزانه ۵ توکن برتر در ساعت ۶ UTC = ۹:۳۰ به وقت ایران
+    should_send_daily = (current_hour_utc == 6) and (state["daily_sent"] != current_date)
+
+    log(f"شروع اسکن... (هشدارهای امروز: {len(alerted_set)}, daily_sent={state['daily_sent']})")
 
     fetcher = MarketDataFetcher()
     coins = fetcher.get_top_coins(limit=25)
@@ -797,16 +810,12 @@ def run_scan():
         return []
 
     log(f"{len(coins)} توکن دریافت شد.")
-    results = []
+    all_results = []
 
     for i, coin in enumerate(coins):
         try:
             coin_id = coin.get("id", "")
             symbol = (coin.get("symbol") or "?").upper()
-
-            if symbol in alerted_set:
-                continue
-
             chart = fetcher.get_market_chart(coin_id, days=30)
             if not chart.get("prices"):
                 continue
@@ -815,11 +824,7 @@ def run_scan():
             onchain_score, onchain_details = score_onchain(coin)
             final_score = tech_score * 0.55 + onchain_score * 0.45
 
-            # فقط امتیاز ۷۰ به بالا
-            if final_score < 60:
-                continue
-
-            results.append({
+            all_results.append({
                 "symbol": symbol,
                 "name": coin.get("name", symbol),
                 "pump_score": round(final_score, 1),
@@ -832,14 +837,49 @@ def run_scan():
             log(f"خطا در {i + 1}: {e}")
             continue
 
-    log(f"توکن‌های مستعد پامپ: {len(results)}")
+    all_results.sort(key=lambda x: x["pump_score"], reverse=True)
 
-    # فقط اگر توکن مستعد وجود داشت، پیام بفرست
-    if results:
-        results.sort(key=lambda x: x["pump_score"], reverse=True)
-        send_telegram(token, chat_id, results, alerted_set)
-        save_state(alerted_set)
+    # ==================== ۱. هشدارهای پامپ (۷۰+) ====================
+    pump_alerts = [r for r in all_results if r["pump_score"] >= 70]
+    new_alerts = [a for a in pump_alerts if a["symbol"] not in alerted_set]
+
+    if new_alerts:
+        log(f"🚨 {len(new_alerts)} هشدار پامپ جدید!")
+        send_telegram(token, chat_id, new_alerts, alerted_set)
+        state["alerted"] = alerted_set
+        save_state(state)
     else:
-        log("هیچ توکنی مستعد پامپ نیست. پیامی ارسال نشد.")
+        log("هیچ هشدار پامپ جدیدی نیست.")
 
-    return results
+    # ==================== ۲. ۵ توکن برتر روزانه ====================
+    if should_send_daily and all_results:
+        log(f"📊 ارسال روزانه ۵ توکن برتر (ساعت UTC: {current_hour_utc})")
+        send_daily_top5(token, chat_id, all_results[:5])
+        state["daily_sent"] = current_date
+        save_state(state)
+    elif should_send_daily:
+        log("📊 زمان ارسال روزانه است اما نتیجه‌ای وجود ندارد.")
+
+    return all_results
+
+
+def send_daily_top5(token, chat_id, top5):
+    """ارسال روزانه ۵ توکن برتر (حتی بدون امتیاز ۷۰)"""
+    if not token or not chat_id:
+        return False
+
+    date_str = datetime.now().strftime('%Y-%m-%d %H:%M')
+
+    header = f"🏆 <b>گزارش روزانه — {date_str}</b>\n۵ توکن برتر ۲۴ ساعت گذشته"
+    _send_one(token, chat_id, header)
+    time.sleep(2)
+
+    for i, a in enumerate(top5, 1):
+        msg = f"<b>🏆 رتبه #{i} — {a['symbol']}</b> (امتیاز {a['pump_score']}/100)\n"
+        msg += f"💵 ${a['price']:.6f} | 📈 {a['change_24h']:+.2f}%\n\n"
+        msg += generate_token_analysis(a)
+        _send_one(token, chat_id, msg)
+        time.sleep(3)
+
+    log("گزارش روزانه ارسال شد.")
+    return True
