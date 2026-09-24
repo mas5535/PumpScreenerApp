@@ -26,34 +26,47 @@ def load_config():
 # ============================================================
 # داده‌های بایننس (فیوچرز، عمق بازار، لانگ/شورت)
 # ============================================================
-def get_binance_derivatives(symbol):
+def get_futures_data(symbol):
+    """دریافت Funding Rate و OI از OKX"""
     result = {"funding_rate": None, "open_interest": None}
+    inst = symbol + "-USDT-SWAP"
     try:
-        url = "https://fapi.binance.com/fapi/v1/premiumIndex"
-        r = requests.get(url, params={"symbol": symbol + "USDT"}, timeout=8)
+        url = "https://www.okx.com/api/v5/public/funding-rate"
+        r = requests.get(url, params={"instId": inst}, timeout=8)
         if r.status_code == 200:
-            result["funding_rate"] = float(r.json().get("lastFundingRate", 0))
+            data = r.json()
+            lst = data.get("data", [])
+            if lst:
+                result["funding_rate"] = float(lst[0].get("fundingRate", 0))
     except Exception:
         pass
     try:
-        url = "https://fapi.binance.com/fapi/v1/openInterest"
-        r = requests.get(url, params={"symbol": symbol + "USDT"}, timeout=8)
+        url = "https://www.okx.com/api/v5/public/open-interest"
+        r = requests.get(url, params={"instType": "SWAP", "instId": inst}, timeout=8)
         if r.status_code == 200:
-            result["open_interest"] = float(r.json().get("openInterest", 0))
+            data = r.json()
+            lst = data.get("data", [])
+            if lst:
+                result["open_interest"] = float(lst[0].get("oi", 0))
     except Exception:
         pass
     return result
 
 
 def get_order_book_pressure(symbol):
+    """دریافت عمق بازار از OKX"""
     try:
-        url = "https://api.binance.com/api/v3/depth"
-        r = requests.get(url, params={"symbol": symbol + "USDT", "limit": 100}, timeout=8)
+        url = "https://www.okx.com/api/v5/market/books"
+        params = {"instId": symbol + "-USDT", "sz": 100}
+        r = requests.get(url, params=params, timeout=8)
         if r.status_code != 200:
             return None
         data = r.json()
-        bids = data.get("bids", [])
-        asks = data.get("asks", [])
+        lst = data.get("data", [])
+        if not lst:
+            return None
+        bids = lst[0].get("bids", [])
+        asks = lst[0].get("asks", [])
         if not bids or not asks:
             return None
         bid_qty = [float(b[1]) for b in bids]
@@ -71,19 +84,19 @@ def get_order_book_pressure(symbol):
 
 
 def get_long_short_ratio(symbol):
-    """نسبت لانگ/شورت از بایننس فیوچرز"""
+    """نسبت لانگ/شورت از OKX"""
     try:
-        url = "https://fapi.binance.com/futures/data/globalLongShortAccountRatio"
-        params = {"symbol": symbol + "USDT", "period": "1h", "limit": 1}
+        url = "https://www.okx.com/api/v5/rubik/stat/contracts/long-short-account-ratio"
+        params = {"ccy": symbol, "period": "1H"}
         r = requests.get(url, params=params, timeout=8)
         if r.status_code == 200:
             data = r.json()
-            if data and len(data) > 0:
-                return {
-                    "long": float(data[0].get("longAccount", 0)) * 100,
-                    "short": float(data[0].get("shortAccount", 0)) * 100,
-                    "ratio": float(data[0].get("longShortRatio", 1)),
-                }
+            lst = data.get("data", [])
+            if lst:
+                ratio = float(lst[0][1])
+                long_pct = ratio / (1 + ratio) * 100
+                short_pct = 100 - long_pct
+                return {"long": long_pct, "short": short_pct, "ratio": ratio}
     except Exception:
         pass
     return None
@@ -584,7 +597,7 @@ def generate_token_analysis(token):
         strengths.append(f"🚀 {mom}")
 
     # --- بازار فیوچرز ---
-    deriv = get_binance_derivatives(symbol)
+    deriv = get_futures_data(symbol)
     deriv_lines = []
     if deriv["funding_rate"] is not None:
         fr = deriv["funding_rate"]
