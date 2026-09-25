@@ -388,8 +388,7 @@ class MarketDataFetcher:
         data = self._get(url, params)
         return data if data else []
 
-def get_market_chart_okx(symbol, days=30):
-    """دریافت داده OHLCV از OKX (رایگان)"""
+def get_market_chart_okx(coin_id, days=30):
     try:
         symbol = coin_id.upper() + "-USDT"
         bars = "1D" if days > 10 else "4H"
@@ -399,16 +398,19 @@ def get_market_chart_okx(symbol, days=30):
             params={"instId": symbol, "bar": bars, "limit": limit},
             timeout=10
         )
+        log(f"DEBUG OKX {symbol}: status={r.status_code}")
         if r.status_code != 200:
             return {"prices": [], "volumes": []}
         data = r.json().get("data", [])
+        log(f"DEBUG OKX {symbol}: {len(data)} candles")
         if not data:
             return {"prices": [], "volumes": []}
         data = list(reversed(data))
         prices = [float(candle[4]) for candle in data]
         volumes = [float(candle[5]) for candle in data]
         return {"prices": prices, "volumes": volumes}
-    except Exception:
+    except Exception as e:
+        log(f"DEBUG OKX ERROR {coin_id}: {e}")
         return {"prices": [], "volumes": []}
 
 # ============================================================
