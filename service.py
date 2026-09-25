@@ -127,6 +127,56 @@ def get_long_short_ratio(symbol):
         pass
     return None
 
+def get_multi_exchange_data(symbol):
+    """بررسی حجم در Coinbase و Kraken"""
+    result = {
+        "coinbase_volume": None,
+        "kraken_volume": None,
+        "exchanges_active": 0,
+        "total_exchanges": 2,
+    }
+
+    try:
+        product = symbol.upper() + "-USD"
+        r = requests.get(
+            f"https://api.exchange.coinbase.com/products/{product}/stats",
+            timeout=8
+        )
+        if r.status_code == 200:
+            data = r.json()
+            volume = float(data.get("volume", 0) or 0)
+            if volume > 0:
+                result["coinbase_volume"] = volume
+                result["exchanges_active"] += 1
+    except Exception:
+        pass
+
+    try:
+        kraken_symbol = symbol.upper()
+        if kraken_symbol == "BTC":
+            kraken_symbol = "XBT"
+        pair = kraken_symbol + "USD"
+        r = requests.get(
+            "https://api.kraken.com/0/public/Ticker",
+            params={"pair": pair},
+            timeout=8
+        )
+        if r.status_code == 200:
+            data = r.json()
+            if not data.get("error"):
+                ticker = data.get("result", {})
+                if ticker:
+                    first_key = list(ticker.keys())[0]
+                    vol_data = ticker[first_key].get("v", [])
+                    if len(vol_data) >= 2:
+                        volume = float(vol_data[1])
+                        if volume > 0:
+                            result["kraken_volume"] = volume
+                            result["exchanges_active"] += 1
+    except Exception:
+        pass
+
+    return result
 
 def get_fear_greed():
     try:
