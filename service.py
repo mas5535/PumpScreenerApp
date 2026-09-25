@@ -1047,6 +1047,15 @@ def run_scan():
     fetcher = MarketDataFetcher()
     coins = fetcher.get_top_coins(limit=50)
 
+    # فیلتر استیبل‌کوین‌ها
+    stablecoins = {
+        "USDT", "USDC", "DAI", "USDS", "BUSD", "TUSD", "USDP", "FDUSD",
+        "USDD", "PYUSD", "GUSD", "FRAX", "UST", "USTC", "MIM", "LUSD",
+        "SUSD", "ALUSD", "DOLA", "CUSD", "USDE", "SUSDE", "USD1", "RLUSD",
+        "EURT", "EURC", "EURS", "XSGD", "BIDR", "IDRT", "TRYB", "BRZ",
+    }
+    coins = [c for c in coins if (c.get("symbol") or "").upper() not in stablecoins]
+    log(f"پس از فیلتر استیبل‌کوین: {len(coins)} توکن باقی ماند.")
     if not coins:
         log("دریافت داده ناموفق.")
         return []
