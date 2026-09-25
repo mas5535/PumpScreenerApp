@@ -989,12 +989,12 @@ def run_scan():
                 continue
 
             chart = get_market_chart_okx(symbol, days=30)
-            log(f"DEBUG {symbol}: {len(chart.get('prices', []))} کندل")
+            log(f"DEBUG {symbol}: کندل={len(chart.get('prices', []))}, accum={accum}, tech={tech:.0f}, final={final:.0f}, ch24={c24:.1f}%")
             if not chart.get("prices"):
                 continue
 
             accum, accum_det = detect_accumulation(chart, coin)
-
+            log(f"DEBUG {symbol}: accum={accum}, ch24={abs(coin.get('price_change_percentage_24h_in_currency') or 0):.1f}%")
             tech, tech_det = score_technical(chart)
             onc, onc_det = score_onchain(coin)
             final = tech * 0.55 + onc * 0.45
