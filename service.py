@@ -718,13 +718,10 @@ def score_technical(chart_data):
 
 
 def detect_accumulation(chart_data, coin):
-    """تشخیص انباشت پول هوشمند (قبل از پامپ)"""
     prices = chart_data.get("prices", [])
     volumes = chart_data.get("volumes", [])
-
     if len(prices) < 30 or len(volumes) < 30:
         return 0, {}
-
     details = {}
     score = 0
 
@@ -732,7 +729,6 @@ def detect_accumulation(chart_data, coin):
     recent_vol = sum(volumes[-7:]) / 7
     previous_vol = sum(volumes[-14:-7]) / 7
     vol_change = (recent_vol - previous_vol) / previous_vol if previous_vol > 0 else 0
-
     recent_price = sum(prices[-7:]) / 7
     previous_price = sum(prices[-14:-7]) / 7
     price_change = (recent_price - previous_price) / previous_price if previous_price > 0 else 0
@@ -759,7 +755,7 @@ def detect_accumulation(chart_data, coin):
     else:
         details["rsi"] = f"RSI={rsi:.0f}"
 
-    # ۳. فشردگی باند
+    # ۳. باند بولینگر
     bw, percentile = calculate_bollinger(prices)
     if percentile <= 25:
         score += 20
@@ -783,7 +779,7 @@ def detect_accumulation(chart_data, coin):
         else:
             details["vwap"] = f"VWAP: {diff:+.2f}%"
 
-    # ۵. شتاب پایین
+    # ۵. شتاب
     change_24h = abs(coin.get("price_change_percentage_24h_in_currency") or 0)
     if change_24h < 3:
         score += 15
@@ -794,10 +790,9 @@ def detect_accumulation(chart_data, coin):
     else:
         details["momentum"] = f"شتاب {change_24h:.1f}% — حرکت شروع شده"
 
-    # ============================================================
-    # ۶. تأیید چندصرافی (Coinbase + Kraken)
-    # ============================================================
-    multi = get_multi_exchange_data(coin.get("symbol", ""))
+    # ۶. تأیید چندصرافی
+    symbol = coin.get("symbol", "")
+    multi = get_multi_exchange_data(symbol)
     if multi:
         active = multi["exchanges_active"]
         if active >= 2:
@@ -805,24 +800,50 @@ def detect_accumulation(chart_data, coin):
             details["multi_exchange"] = f"✅ تأیید چندصرافی ({active}/2 صرافی)"
         elif active == 1:
             score += 8
-            details["multi_exchange"] = f"🟡 حضور در ۱ صرافی از ۲"
+            details["multi_exchange"] = f"🟡 حضور در ۱ صرافی"
         else:
-            details["multi_exchange"] = f"⚠️ فقط در یک صرافی — احتمال دستکاری"
+            details["multi_exchange"] = f"⚠️ فقط در یک صرافی"
 
-    # ============================================================
-    # ۷. پرمیوم اسپات-فیوچرز (OKX)
-    # ============================================================
-    premium = get_spot_futures_premium(coin.get("symbol", ""))
+    # ۷. پرمیوم اسپات-فیوچرز
+    premium = get_spot_futures_premium(symbol)
     if premium:
         pct = premium["premium_pct"]
         if pct > 0.5:
             score += 10
-            details["premium"] = f"📈 فیوچرز {pct:+.3f}% بالای اسپات (احساسات صعودی)"
+            details["premium"] = f"📈 فیوچرز {pct:+.3f}% بالای اسپات"
         elif pct < -0.5:
             score -= 10
-            details["premium"] = f"📉 فیوچرز {pct:+.3f}% زیر اسپات (فشار فروش)"
+            details["premium"] = f"📉 فیوچرز {pct:+.3f}% زیر اسپات"
         else:
-            details["premium"] = f"⚖️ پرمیوم {pct:+.3f}% (نرمال)"
+            details["premium"] = f"⚖️ پرمیوم {pct:+.3f}% نرمال"
+
+    # ۸. ترند
+    trending_rank = coin.get("_trending_rank")
+    if trending_rank:
+        if trending_rank <= 3:
+            score += 20
+            details["trending"] = f"🔥 ترند #{trending_rank} (هیجان بالا)"
+        elif trending_rank <= 7:
+            score += 12
+            details["trending"] = f"🔥 ترند #{trending_rank}"
+        else:
+            score += 5
+            details["trending"] = f"📈 در ترندها (#{trending_rank})"
+
+    # ۹. نهنگ‌ها
+    whale = get_whale_trades(symbol)
+    if whale:
+        count = whale["count"]
+        buy_ratio = whale["buy_ratio"]
+        if buy_ratio > 0.7:
+            score += 20
+            details["whale"] = f"🐋 {count} معامله بزرگ — {buy_ratio*100:.0f}% خرید"
+        elif buy_ratio < 0.3:
+            score -= 10
+            details["whale"] = f"🐋 {count} معامله بزرگ — {buy_ratio*100:.0f}% فروش"
+        else:
+            score += 5
+            details["whale"] = f"🐋 {count} معامله بزرگ — متعادل"
 
     return min(score, 100), details
 
@@ -1194,7 +1215,7 @@ def run_scan():
     log(f"شروع اسکن انباشت... (هشدارهای امروز: {len(alerted_set)}, ساعت UTC: {current_hour_utc})")
 
     fetcher = MarketDataFetcher()
-    coins = fetcher.get_top_coins(limit=25)
+    coins = fetcher.get_top_coins(limit=15)
 
     # فیلتر استیبل‌کوین‌ها
     stablecoins = {
@@ -1264,7 +1285,7 @@ def run_scan():
                 "change_24h": coin.get("price_change_percentage_24h_in_currency") or 0,
                 "details": {**tech_details, **onchain_details},
             })
-            time.sleep(7)
+            time.sleep(5)
         except Exception as e:
             log(f"خطا در {i + 1}: {e}")
             continue
