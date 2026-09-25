@@ -388,7 +388,7 @@ class MarketDataFetcher:
         data = self._get(url, params)
         return data if data else []
 
-def get_market_chart_okx(coin_id, days=30):
+def get_market_chart_okx(symbol, days=30):
     """دریافت داده OHLCV از OKX (رایگان)"""
     try:
         symbol = coin_id.upper() + "-USDT"
