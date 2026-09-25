@@ -388,28 +388,28 @@ class MarketDataFetcher:
         data = self._get(url, params)
         return data if data else []
 
- def get_market_chart(self, coin_id, days=30):
-     """دریافت داده OHLCV از OKX (رایگان و بدون API Key)"""
-     try:
-         symbol = coin_id.upper() + "-USDT"
-         bars = "1D" if days > 10 else "4H"
-         limit = min(days, 300)
-         r = self.session.get(
-             "https://www.okx.com/api/v5/market/candles",
-             params={"instId": symbol, "bar": bars, "limit": limit},
-             timeout=10
-         )
-         if r.status_code != 200:
-             return {"prices": [], "volumes": []}
-         data = r.json().get("data", [])
-         if not data:
-             return {"prices": [], "volumes": []}
-         data = list(reversed(data))
-         prices = [float(candle[4]) for candle in data]
-         volumes = [float(candle[5]) for candle in data]
-         return {"prices": prices, "volumes": volumes}
-     except Exception:
-         return {"prices": [], "volumes": []}
+def get_market_chart(self, coin_id, days=30):
+    """دریافت داده OHLCV از OKX (رایگان و بدون API Key)"""
+    try:
+        symbol = coin_id.upper() + "-USDT"
+        bars = "1D" if days > 10 else "4H"
+        limit = min(days, 300)
+        r = self.session.get(
+            "https://www.okx.com/api/v5/market/candles",
+            params={"instId": symbol, "bar": bars, "limit": limit},
+            timeout=10
+        )
+        if r.status_code != 200:
+            return {"prices": [], "volumes": []}
+        data = r.json().get("data", [])
+        if not data:
+            return {"prices": [], "volumes": []}
+        data = list(reversed(data))
+        prices = [float(candle[4]) for candle in data]
+        volumes = [float(candle[5]) for candle in data]
+        return {"prices": prices, "volumes": volumes}
+    except Exception:
+        return {"prices": [], "volumes": []}
 
 # ============================================================
 # شاخص‌های تکنیکال
