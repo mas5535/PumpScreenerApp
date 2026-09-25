@@ -227,6 +227,68 @@ def get_spot_futures_premium(symbol):
         }
 
     return None
+def get_whale_trades(symbol):
+    """
+    تشخیص معاملات بزرگ آنی از OKX (فعالیت نهنگ‌ها)
+    آستانه: ۱۰ برابر میانگین اندازه معاملات
+    """
+    try:
+        url = "https://www.okx.com/api/v5/market/trades"
+        params = {"instId": symbol.upper() + "-USDT", "limit": 100}
+        r = requests.get(url, params=params, timeout=8)
+        if r.status_code != 200:
+            return None
+        data = r.json().get("data", [])
+        if not data or len(data) < 10:
+            return None
+
+        # محاسبه ارزش هر معامله
+        trades = []
+        for trade in data:
+            try:
+                price = float(trade.get("px", 0))
+                size = float(trade.get("sz", 0))
+                side = trade.get("side", "")
+                value = price * size
+                trades.append({"value": value, "side": side})
+            except Exception:
+                continue
+
+        if not trades:
+            return None
+
+        values = [t["value"] for t in trades]
+        avg_value = sum(values) / len(values)
+        threshold = max(avg_value * 10, 50000)
+
+        buy_value = 0
+        sell_value = 0
+        whale_count = 0
+
+        for t in trades:
+            if t["value"] >= threshold:
+                whale_count += 1
+                if t["side"] == "buy":
+                    buy_value += t["value"]
+                else:
+                    sell_value += t["value"]
+
+        if whale_count == 0:
+            return None
+
+        total_whale = buy_value + sell_value
+        buy_ratio = buy_value / total_whale if total_whale > 0 else 0.5
+
+        return {
+            "count": whale_count,
+            "buy_value": buy_value,
+            "sell_value": sell_value,
+            "buy_ratio": buy_ratio,
+            "threshold": threshold,
+        }
+    except Exception:
+        return None
+
 def get_trending_coins():
     """دریافت توکن‌های ترند CoinGecko (نشانه هیجان اجتماعی)"""
     try:
