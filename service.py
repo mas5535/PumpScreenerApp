@@ -842,6 +842,33 @@ def send_telegram(token, chat_id, alerts, alerted_set):
     log(f"{len(new_alerts)} هشدار جدید ارسال شد.")
     return True
 
+def send_accumulation_alerts(token, chat_id, alerts, alerted_set):
+    """ارسال هشدار انباشت (قبل از پامپ)"""
+    if not token or not chat_id:
+        return False
+
+    new_alerts = [a for a in alerts if a["symbol"] not in alerted_set]
+    if not new_alerts:
+        log("هیچ هشدار انباشت جدیدی نیست.")
+        return True
+
+    date_str = datetime.now().strftime('%Y-%m-%d %H:%M')
+    header = f"🎯 <b>هشدار انباشت پول هوشمند — {date_str}</b>\n"
+    header += f"تعداد: <b>{len(new_alerts)}</b> توکن در حال انباشت (قبل از پامپ)"
+    _send_one(token, chat_id, header)
+    time.sleep(2)
+
+    for i, a in enumerate(new_alerts[:5], 1):
+        msg = f"<b>🎯 #{i} {a['symbol']}</b> — امتیاز انباشت: <b>{a['accum_score']}/100</b>\n"
+        msg += f"💵 ${a['price']:.6f} | 📈 {a['change_24h']:+.2f}% (هنوز پامپ نشده)\n\n"
+        msg += generate_accumulation_analysis(a)
+        _send_one(token, chat_id, msg)
+        time.sleep(3)
+        alerted_set.add(a["symbol"])
+
+    log(f"{len(new_alerts)} هشدار انباشت ارسال شد.")
+    return True
+
 
 def send_daily_top5(token, chat_id, top5):
     if not token or not chat_id or not top5:
