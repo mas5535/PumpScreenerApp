@@ -696,7 +696,26 @@ def score_technical(chart_data):
         else:
             score += 5
             details["trending"] = f"📈 در لیست ترندها (#{trending_rank})"
+            
+    # ============================================================
+    # ۹. معاملات بزرگ نهنگ‌ها (OKX)
+    # ============================================================
+    whale = get_whale_trades(coin.get("symbol", ""))
+    if whale:
+        count = whale["count"]
+        buy_ratio = whale["buy_ratio"]
+
+        if buy_ratio > 0.7:
+            score += 20
+            details["whale"] = f"🐋 {count} معامله بزرگ — {buy_ratio*100:.0f}% خرید"
+        elif buy_ratio < 0.3:
+            score -= 10
+            details["whale"] = f"🐋 {count} معامله بزرگ — {buy_ratio*100:.0f}% فروش"
+        else:
+            score += 5
+            details["whale"] = f"🐋 {count} معامله بزرگ — متعادل"
     return min(score, 100), details
+
 
 def detect_accumulation(chart_data, coin):
     """تشخیص انباشت پول هوشمند (قبل از پامپ)"""
@@ -1064,6 +1083,9 @@ def generate_accumulation_analysis(token):
     trending = details.get("trending", "")
     if trending:
         signals.append(trending)
+    whale = details.get("whale", "")
+    if whale:
+        signals.append(whale)
     if signals:
         lines.append("🎯 <b>سیگنال‌های انباشت:</b>")
         for s in signals:
