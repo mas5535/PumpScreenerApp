@@ -178,6 +178,56 @@ def get_multi_exchange_data(symbol):
 
     return result
 
+def get_spot_futures_premium(symbol):
+    """
+    بررسی پرمیوم اسپات-فیوچرز در OKX
+    اگر فیوچرز بالاتر باشد → احساسات صعودی
+    اگر پایین‌تر باشد → فشار فروش
+    """
+    inst_spot = symbol.upper() + "-USDT"
+    inst_swap = symbol.upper() + "-USDT-SWAP"
+
+    spot_price = None
+    futures_price = None
+
+    # قیمت اسپات
+    try:
+        r = requests.get(
+            "https://www.okx.com/api/v5/market/ticker",
+            params={"instId": inst_spot},
+            timeout=8
+        )
+        if r.status_code == 200:
+            data = r.json().get("data", [])
+            if data:
+                spot_price = float(data[0].get("last", 0) or 0)
+    except Exception:
+        pass
+
+    # قیمت فیوچرز (Swap)
+    try:
+        r = requests.get(
+            "https://www.okx.com/api/v5/market/ticker",
+            params={"instId": inst_swap},
+            timeout=8
+        )
+        if r.status_code == 200:
+            data = r.json().get("data", [])
+            if data:
+                futures_price = float(data[0].get("last", 0) or 0)
+    except Exception:
+        pass
+
+    if spot_price and futures_price and spot_price > 0:
+        premium_pct = ((futures_price - spot_price) / spot_price) * 100
+        return {
+            "spot": spot_price,
+            "futures": futures_price,
+            "premium_pct": round(premium_pct, 4),
+        }
+
+    return None
+
 def get_fear_greed():
     try:
         r = requests.get("https://api.alternative.me/fng/?limit=1", timeout=8)
