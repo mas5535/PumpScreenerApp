@@ -1231,6 +1231,10 @@ def run_scan():
     fetcher = MarketDataFetcher()
     coins = fetcher.get_top_coins(limit=30)
 
+    if not coins:
+        log("دریافت داده ناموفق.")
+        return []
+
     # فیلتر استیبل‌کوین‌ها
     stablecoins = {
         "USDT", "USDC", "DAI", "USDS", "BUSD", "TUSD", "USDP", "FDUSD",
@@ -1240,16 +1244,13 @@ def run_scan():
     }
     coins = [c for c in coins if (c.get("symbol") or "").upper() not in stablecoins]
     log(f"پس از فیلتر استیبل‌کوین: {len(coins)} توکن باقی ماند.")
-    
-    # دریافت لیست ترندهای CoinGecko
+
+    # دریافت ترندها
     trending = get_trending_coins()
     log(f"تعداد توکن‌های ترند: {len(trending)}")
     for coin in coins:
-        symbol = (coin.get("symbol") or "").upper()
-        coin["_trending_rank"] = trending.get(symbol)
-    if not coins:
-        log("دریافت داده ناموفق.")
-        return []
+        sym = (coin.get("symbol") or "").upper()
+        coin["_trending_rank"] = trending.get(sym)
 
     log(f"{len(coins)} توکن دریافت شد.")
     accumulation_alerts = []
@@ -1263,24 +1264,21 @@ def run_scan():
             if symbol in alerted_set:
                 continue
 
-            chart = get_market_chart_okx(coin_id, days=30)
+            chart = get_market_chart_okx(symbol, days=30)
             if not chart.get("prices"):
                 continue
 
-            # امتیاز انباشت (برای هشدار ساعتی)
             accum_score, accum_details = detect_accumulation(chart, coin)
-            log(f"DEBUG {symbol}: امتیاز انباشت={accum_score}, پامپ={final_score:.1f}, تغییر24h={change_24h:.1f}%")
-            # امتیاز تکنیکال (برای گزارش روزانه)
+            log(f"DEBUG {symbol}: accum={accum_score}")
+
             tech_score, tech_details = score_technical(chart)
             onchain_score, onchain_details = score_onchain(coin)
             final_score = tech_score * 0.55 + onchain_score * 0.45
 
-            # چک: آیا هنوز پامپ نشده؟
             change_24h = abs(coin.get("price_change_percentage_24h_in_currency") or 0)
             not_pumped_yet = change_24h < 10
 
-            # هشدار انباشت
-            if accum_score >= 30 and not_pumped_yet:
+            if accum_score >= 60 and not_pumped_yet:
                 accumulation_alerts.append({
                     "symbol": symbol,
                     "name": coin.get("name", symbol),
@@ -1299,14 +1297,13 @@ def run_scan():
                 "change_24h": coin.get("price_change_percentage_24h_in_currency") or 0,
                 "details": {**tech_details, **onchain_details},
             })
-            time.sleep(5)
+            time.sleep(1)
         except Exception as e:
             log(f"خطا در {i + 1}: {e}")
             continue
 
     all_results.sort(key=lambda x: x["pump_score"], reverse=True)
 
-    # ارسال هشدارهای انباشت
     if accumulation_alerts:
         log(f"🎯 {len(accumulation_alerts)} توکن در حال انباشت!")
         send_accumulation_alerts(token, chat_id, accumulation_alerts, alerted_set)
@@ -1315,7 +1312,6 @@ def run_scan():
     else:
         log("هیچ توکنی در حال انباشت نیست.")
 
-    # گزارش روزانه
     if should_send_daily and all_results:
         log("📊 ارسال گزارش روزانه...")
         send_daily_top5(token, chat_id, all_results[:5])
