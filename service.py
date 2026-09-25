@@ -1245,7 +1245,7 @@ def run_scan():
             not_pumped_yet = change_24h < 10
 
             # هشدار انباشت
-            if accum_score >= 60 and not_pumped_yet:
+            if accum_score >= 30 and not_pumped_yet:
                 accumulation_alerts.append({
                     "symbol": symbol,
                     "name": coin.get("name", symbol),
