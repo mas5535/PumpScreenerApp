@@ -474,6 +474,86 @@ def score_technical(chart_data):
 
     return min(score, 100), details
 
+def detect_accumulation(chart_data, coin):
+    """تشخیص انباشت پول هوشمند (قبل از پامپ)"""
+    prices = chart_data.get("prices", [])
+    volumes = chart_data.get("volumes", [])
+
+    if len(prices) < 30 or len(volumes) < 30:
+        return 0, {}
+
+    details = {}
+    score = 0
+
+    # ۱. واگرایی حجم و قیمت
+    recent_vol = sum(volumes[-7:]) / 7
+    previous_vol = sum(volumes[-14:-7]) / 7
+    vol_change = (recent_vol - previous_vol) / previous_vol if previous_vol > 0 else 0
+
+    recent_price = sum(prices[-7:]) / 7
+    previous_price = sum(prices[-14:-7]) / 7
+    price_change = (recent_price - previous_price) / previous_price if previous_price > 0 else 0
+
+    if vol_change > 0.5 and abs(price_change) < 0.05:
+        score += 30
+        details["divergence"] = f"واگرایی قوی: حجم +{vol_change*100:.0f}% / قیمت {price_change*100:+.1f}%"
+        details["divergence_signal"] = "strong"
+    elif vol_change > 0.3 and abs(price_change) < 0.08:
+        score += 20
+        details["divergence"] = f"واگرایی متوسط: حجم +{vol_change*100:.0f}% / قیمت {price_change*100:+.1f}%"
+    elif vol_change > 0.2:
+        score += 10
+        details["divergence"] = f"افزایش حجم: +{vol_change*100:.0f}%"
+
+    # ۲. RSI
+    rsi = calculate_rsi(prices)
+    if 35 <= rsi <= 55:
+        score += 20
+        details["rsi"] = f"RSI={rsi:.0f} (محدوده انباشت)"
+    elif 55 < rsi <= 65:
+        score += 10
+        details["rsi"] = f"RSI={rsi:.0f} (نزدیک به انفجار)"
+    else:
+        details["rsi"] = f"RSI={rsi:.0f}"
+
+    # ۳. فشردگی باند
+    bw, percentile = calculate_bollinger(prices)
+    if percentile <= 25:
+        score += 20
+        details["bb"] = f"فشردگی شدید باند (صدک {percentile:.0f})"
+    elif percentile <= 40:
+        score += 10
+        details["bb"] = f"باند باریک (صدک {percentile:.0f})"
+    else:
+        details["bb"] = f"باند باز (صدک {percentile:.0f})"
+
+    # ۴. VWAP
+    vwap_data = calculate_vwap(prices, volumes)
+    if vwap_data:
+        diff = vwap_data["diff_pct"]
+        if -5 <= diff <= 5:
+            score += 15
+            details["vwap"] = f"قیمت نزدیک VWAP ({diff:+.2f}%) — فرصت ورود"
+        elif 5 < diff <= 15:
+            score += 5
+            details["vwap"] = f"VWAP: {diff:+.2f}% بالای میانگین"
+        else:
+            details["vwap"] = f"VWAP: {diff:+.2f}%"
+
+    # ۵. شتاب پایین
+    change_24h = abs(coin.get("price_change_percentage_24h_in_currency") or 0)
+    if change_24h < 3:
+        score += 15
+        details["momentum"] = f"شتاب {change_24h:.1f}% — هنوز پامپ نشده"
+    elif change_24h < 7:
+        score += 8
+        details["momentum"] = f"شتاب {change_24h:.1f}% — در حال شروع"
+    else:
+        details["momentum"] = f"شتاب {change_24h:.1f}% — حرکت شروع شده"
+
+    return min(score, 100), details
+
+
 
 def score_onchain(coin):
     score = 0
