@@ -620,6 +620,20 @@ def score_technical(chart_data):
         else:
             details["vp"] = f"Volume Profile: در محدوده ارزش (POC: {vp['poc']:.4f})"
 
+    # ============================================================
+    # ۸. ترند اجتماعی (CoinGecko Trending)
+    # ============================================================
+    trending_rank = coin.get("_trending_rank")
+    if trending_rank:
+        if trending_rank <= 3:
+            score += 20
+            details["trending"] = f"🔥 ترند #{trending_rank} در CoinGecko (هیجان بالا)"
+        elif trending_rank <= 7:
+            score += 12
+            details["trending"] = f"🔥 ترند #{trending_rank} در CoinGecko"
+        else:
+            score += 5
+            details["trending"] = f"📈 در لیست ترندها (#{trending_rank})"
     return min(score, 100), details
 
 def detect_accumulation(chart_data, coin):
@@ -985,6 +999,9 @@ def generate_accumulation_analysis(token):
     premium = details.get("premium", "")
     if premium:
         signals.append(f"💱 {premium}")
+    trending = details.get("trending", "")
+    if trending:
+        signals.append(trending)
     if signals:
         lines.append("🎯 <b>سیگنال‌های انباشت:</b>")
         for s in signals:
@@ -1104,6 +1121,13 @@ def run_scan():
     }
     coins = [c for c in coins if (c.get("symbol") or "").upper() not in stablecoins]
     log(f"پس از فیلتر استیبل‌کوین: {len(coins)} توکن باقی ماند.")
+    
+    # دریافت لیست ترندهای CoinGecko
+    trending = get_trending_coins()
+    log(f"تعداد توکن‌های ترند: {len(trending)}")
+    for coin in coins:
+        symbol = (coin.get("symbol") or "").upper()
+        coin["_trending_rank"] = trending.get(symbol)
     if not coins:
         log("دریافت داده ناموفق.")
         return []
