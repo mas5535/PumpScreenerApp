@@ -1267,7 +1267,7 @@ def run_scan():
 
             # امتیاز انباشت (برای هشدار ساعتی)
             accum_score, accum_details = detect_accumulation(chart, coin)
-
+            log(f"DEBUG {symbol}: امتیاز انباشت={accum_score}, پامپ={final_score:.1f}, تغییر24h={change_24h:.1f}%")
             # امتیاز تکنیکال (برای گزارش روزانه)
             tech_score, tech_details = score_technical(chart)
             onchain_score, onchain_details = score_onchain(coin)
