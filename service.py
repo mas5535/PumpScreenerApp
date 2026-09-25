@@ -1227,7 +1227,7 @@ def run_scan():
     log(f"شروع اسکن انباشت... (هشدارهای امروز: {len(alerted_set)}, ساعت UTC: {current_hour_utc})")
 
     fetcher = MarketDataFetcher()
-    coins = fetcher.get_top_coins(limit=15)
+    coins = fetcher.get_top_coins(limit=30)
 
     # فیلتر استیبل‌کوین‌ها
     stablecoins = {
