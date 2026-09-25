@@ -1194,7 +1194,7 @@ def run_scan():
     log(f"شروع اسکن انباشت... (هشدارهای امروز: {len(alerted_set)}, ساعت UTC: {current_hour_utc})")
 
     fetcher = MarketDataFetcher()
-    coins = fetcher.get_top_coins(limit=50)
+    coins = fetcher.get_top_coins(limit=25)
 
     # فیلتر استیبل‌کوین‌ها
     stablecoins = {
@@ -1264,7 +1264,7 @@ def run_scan():
                 "change_24h": coin.get("price_change_percentage_24h_in_currency") or 0,
                 "details": {**tech_details, **onchain_details},
             })
-            time.sleep(1.5)
+            time.sleep(7)
         except Exception as e:
             log(f"خطا در {i + 1}: {e}")
             continue
