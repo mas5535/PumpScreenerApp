@@ -901,34 +901,58 @@ def run_scan():
     state = load_state()
     alerted_set = state["alerted"]
 
-    # ساعت ۴ UTC = ۸ صبح ایران
     current_hour_utc = datetime.utcnow().hour
     current_date = datetime.now().strftime("%Y-%m-%d")
     should_send_daily = (current_hour_utc >= 4) and (state["daily_sent"] != current_date)
 
-    log(f"شروع اسکن... (هشدارهای امروز: {len(alerted_set)}, ساعت UTC: {current_hour_utc})")
+    log(f"شروع اسکن انباشت... (هشدارهای امروز: {len(alerted_set)}, ساعت UTC: {current_hour_utc})")
 
     fetcher = MarketDataFetcher()
-    coins = fetcher.get_top_coins(limit=25)
+    coins = fetcher.get_top_coins(limit=50)
 
     if not coins:
         log("دریافت داده ناموفق.")
         return []
 
     log(f"{len(coins)} توکن دریافت شد.")
+    accumulation_alerts = []
     all_results = []
 
     for i, coin in enumerate(coins):
         try:
             coin_id = coin.get("id", "")
             symbol = (coin.get("symbol") or "?").upper()
+
+            if symbol in alerted_set:
+                continue
+
             chart = fetcher.get_market_chart(coin_id, days=30)
             if not chart.get("prices"):
                 continue
 
+            # امتیاز انباشت (برای هشدار ساعتی)
+            accum_score, accum_details = detect_accumulation(chart, coin)
+
+            # امتیاز تکنیکال (برای گزارش روزانه)
             tech_score, tech_details = score_technical(chart)
             onchain_score, onchain_details = score_onchain(coin)
             final_score = tech_score * 0.55 + onchain_score * 0.45
+
+            # چک: آیا هنوز پامپ نشده؟
+            change_24h = abs(coin.get("price_change_percentage_24h_in_currency") or 0)
+            not_pumped_yet = change_24h < 10
+
+            # هشدار انباشت
+            if accum_score >= 60 and not_pumped_yet:
+                accumulation_alerts.append({
+                    "symbol": symbol,
+                    "name": coin.get("name", symbol),
+                    "accum_score": round(accum_score, 1),
+                    "pump_score": round(final_score, 1),
+                    "price": coin.get("current_price") or 0,
+                    "change_24h": coin.get("price_change_percentage_24h_in_currency") or 0,
+                    "details": accum_details,
+                })
 
             all_results.append({
                 "symbol": symbol,
@@ -945,17 +969,16 @@ def run_scan():
 
     all_results.sort(key=lambda x: x["pump_score"], reverse=True)
 
-    # هشدارهای پامپ (۷۰+)
-    pump_alerts = [r for r in all_results if r["pump_score"] >= 70]
-    if pump_alerts:
-        log(f"🚨 {len(pump_alerts)} توکن با امتیاز ۷۰+")
-        send_telegram(token, chat_id, pump_alerts, alerted_set)
+    # ارسال هشدارهای انباشت
+    if accumulation_alerts:
+        log(f"🎯 {len(accumulation_alerts)} توکن در حال انباشت!")
+        send_accumulation_alerts(token, chat_id, accumulation_alerts, alerted_set)
         state["alerted"] = alerted_set
         save_state(state)
     else:
-        log("هیچ توکنی امتیاز ۷۰+ ندارد.")
+        log("هیچ توکنی در حال انباشت نیست.")
 
-    # گزارش روزانه (ساعت ۸ صبح ایران)
+    # گزارش روزانه
     if should_send_daily and all_results:
         log("📊 ارسال گزارش روزانه...")
         send_daily_top5(token, chat_id, all_results[:5])
