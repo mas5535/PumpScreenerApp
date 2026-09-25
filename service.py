@@ -227,6 +227,54 @@ def get_spot_futures_premium(symbol):
         }
 
     return None
+def get_trending_coins():
+    """دریافت توکن‌های ترند CoinGecko (نشانه هیجان اجتماعی)"""
+    try:
+        r = requests.get(
+            "https://api.coingecko.com/api/v3/search/trending",
+            timeout=10
+        )
+        if r.status_code == 200:
+            data = r.json()
+            coins = data.get("coins", [])
+            result = {}
+            for i, item in enumerate(coins):
+                coin_id = item.get("item", {}).get("id", "")
+                symbol = item.get("item", {}).get("symbol", "").upper()
+                if symbol:
+                    # رتبه ۰ = مهم‌ترین
+                    result[symbol] = i + 1
+            return result
+    except Exception:
+        pass
+    return {}
+
+
+def get_coin_social_data(coin_id):
+    """دریافت داده‌های اجتماعی از CoinGecko"""
+    try:
+        r = requests.get(
+            f"https://api.coingecko.com/api/v3/coins/{coin_id}",
+            params={
+                "localization": "false",
+                "tickers": "false",
+                "market_data": "false",
+                "community_data": "true",
+                "developer_data": "false",
+            },
+            timeout=10
+        )
+        if r.status_code == 200:
+            data = r.json()
+            community = data.get("community_data", {})
+            return {
+                "twitter_followers": community.get("twitter_followers") or 0,
+                "reddit_subscribers": community.get("reddit_subscribers") or 0,
+                "telegram_users": community.get("telegram_channel_user_count") or 0,
+            }
+    except Exception:
+        pass
+    return None
 
 def get_fear_greed():
     try:
