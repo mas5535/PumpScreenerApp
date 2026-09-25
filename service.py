@@ -651,6 +651,36 @@ def detect_accumulation(chart_data, coin):
     else:
         details["momentum"] = f"شتاب {change_24h:.1f}% — حرکت شروع شده"
 
+    # ============================================================
+    # ۶. تأیید چندصرافی (Coinbase + Kraken)
+    # ============================================================
+    multi = get_multi_exchange_data(coin.get("symbol", ""))
+    if multi:
+        active = multi["exchanges_active"]
+        if active >= 2:
+            score += 15
+            details["multi_exchange"] = f"✅ تأیید چندصرافی ({active}/2 صرافی)"
+        elif active == 1:
+            score += 8
+            details["multi_exchange"] = f"🟡 حضور در ۱ صرافی از ۲"
+        else:
+            details["multi_exchange"] = f"⚠️ فقط در یک صرافی — احتمال دستکاری"
+
+    # ============================================================
+    # ۷. پرمیوم اسپات-فیوچرز (OKX)
+    # ============================================================
+    premium = get_spot_futures_premium(coin.get("symbol", ""))
+    if premium:
+        pct = premium["premium_pct"]
+        if pct > 0.5:
+            score += 10
+            details["premium"] = f"📈 فیوچرز {pct:+.3f}% بالای اسپات (احساسات صعودی)"
+        elif pct < -0.5:
+            score -= 10
+            details["premium"] = f"📉 فیوچرز {pct:+.3f}% زیر اسپات (فشار فروش)"
+        else:
+            details["premium"] = f"⚖️ پرمیوم {pct:+.3f}% (نرمال)"
+
     return min(score, 100), details
 
 
@@ -900,6 +930,13 @@ def generate_accumulation_analysis(token):
     elif "در حال شروع" in mom:
         signals.append(f"⚡ {mom}")
 
+    multi = details.get("multi_exchange", "")
+    if multi:
+        signals.append(f"🏦 {multi}")
+
+    premium = details.get("premium", "")
+    if premium:
+        signals.append(f"💱 {premium}")
     if signals:
         lines.append("🎯 <b>سیگنال‌های انباشت:</b>")
         for s in signals:
