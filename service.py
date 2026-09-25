@@ -388,13 +388,13 @@ class MarketDataFetcher:
         data = self._get(url, params)
         return data if data else []
 
-def get_market_chart(self, coin_id, days=30):
-    """دریافت داده OHLCV از OKX (رایگان و بدون API Key)"""
+def get_market_chart_okx(coin_id, days=30):
+    """دریافت داده OHLCV از OKX (رایگان)"""
     try:
         symbol = coin_id.upper() + "-USDT"
         bars = "1D" if days > 10 else "4H"
         limit = min(days, 300)
-        r = self.session.get(
+        r = requests.get(
             "https://www.okx.com/api/v5/market/candles",
             params={"instId": symbol, "bar": bars, "limit": limit},
             timeout=10
@@ -1261,7 +1261,7 @@ def run_scan():
             if symbol in alerted_set:
                 continue
 
-            chart = fetcher.get_market_chart(coin_id, days=30)
+            chart = get_market_chart_okx(coin_id, days=30)
             if not chart.get("prices"):
                 continue
 
