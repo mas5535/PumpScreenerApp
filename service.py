@@ -989,7 +989,6 @@ def run_scan():
                 continue
 
             chart = get_market_chart_okx(symbol, days=30)
-            log(f"DEBUG {symbol}: کندل={len(chart.get('prices', []))}, accum={accum}, tech={tech:.0f}, final={final:.0f}, ch24={c24:.1f}%")
             if not chart.get("prices"):
                 continue
 
