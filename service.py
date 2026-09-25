@@ -748,6 +748,72 @@ def _send_one(token, chat_id, text):
     except Exception as e:
         log(f"خطا در ارسال: {e}")
         return False
+def generate_accumulation_analysis(token):
+    """تولید تحلیل برای سیگنال انباشت (قبل از پامپ)"""
+    symbol = token["symbol"]
+    score = token["accum_score"]
+    details = token.get("details", {})
+    lines = []
+
+    if score >= 80:
+        level = "🟢 انباشت بسیار قوی — احتمال پامپ بالا"
+    elif score >= 70:
+        level = "🟢 انباشت قوی — در رادار"
+    elif score >= 60:
+        level = "🟡 انباشت متوسط — زیر نظر"
+    else:
+        level = "🟠 انباشت اولیه"
+
+    lines.append(f"<b>{symbol}</b> — {level}")
+    lines.append(f"📊 امتیاز پامپ فعلی: {token.get('pump_score', 0)}/100 (هنوز پایین = فرصت)")
+
+    signals = []
+
+    div = details.get("divergence", "")
+    if div:
+        if details.get("divergence_signal") == "strong":
+            signals.append(f"🔥 {div} — نشانه قوی انباشت")
+        else:
+            signals.append(f"📊 {div}")
+
+    rsi = details.get("rsi", "")
+    if "محدوده انباشت" in rsi:
+        signals.append(f"📈 {rsi} — آماده برای حرکت")
+    elif "نزدیک به انفجار" in rsi:
+        signals.append(f"📈 {rsi}")
+
+    bb = details.get("bb", "")
+    if "فشردگی" in bb:
+        signals.append(f"🎯 {bb} — شکست قریب‌الوقوع")
+    elif "باریک" in bb:
+        signals.append(f"📉 {bb}")
+
+    vwap = details.get("vwap", "")
+    if "فرصت ورود" in vwap:
+        signals.append(f"💎 {vwap}")
+    elif vwap:
+        signals.append(f"📏 {vwap}")
+
+    mom = details.get("momentum", "")
+    if "هنوز پامپ نشده" in mom:
+        signals.append(f"✅ {mom}")
+    elif "در حال شروع" in mom:
+        signals.append(f"⚡ {mom}")
+
+    if signals:
+        lines.append("🎯 <b>سیگنال‌های انباشت:</b>")
+        for s in signals:
+            lines.append(f"   • {s}")
+
+    lines.append("")
+    lines.append("💡 <b>استراتژی پیشنهادی:</b>")
+    lines.append("   • این توکن هنوز پامپ نشده — فرصت ورود اولیه")
+    lines.append("   • حد ضرر: ۸٪ زیر قیمت فعلی")
+    lines.append("   • هدف: ۲۰-۵۰٪ سود")
+    lines.append("   • حجم پیشنهادی: ۱-۲٪ سرمایه")
+
+    return "\n".join(lines)
+
 
 
 def send_telegram(token, chat_id, alerts, alerted_set):
