@@ -1,0 +1,44 @@
+name: Run Pump Screener (All Coins)
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  run-screener-all:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+
+      - name: Install requests
+        run: pip install requests
+
+      - name: Run Screener All
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN_ALL }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID_ALL }}
+        run: python service_all.py
+
+      - name: Commit alerted_all.json
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if [ -f alerted_all.json ]; then
+            git add alerted_all.json
+            git diff --quiet && git diff --staged --quiet || git commit -m "Update alerted_all [skip ci]"
+            git push
+          fi
