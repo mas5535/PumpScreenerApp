@@ -988,7 +988,7 @@ def run_scan():
     log(f"OKX برگرداند: {len(coins)} توکن")
 
     # فیلتر سهام توکنیزه (شروع با X)
-    coins = [c for c in coins if not (c.get("symbol") or "").upper().startswith("x")]
+    coins = [c for c in coins if not (c.get("symbol") or "").upper().lower().startswith("x")]
     log(f"پس از فیلتر سهام: {len(coins)} توکن")
 
     # فیلتر کالا (طلا، نقره)
@@ -1012,19 +1012,6 @@ def run_scan():
     if not coins:
         log("دریافت داده ناموفق.")
         return []
-
-    # فیلتر استیبل‌کوین
-    stable = {
-        "USDT", "USDC", "DAI", "USDS", "BUSD", "TUSD", "USDP", "FDUSD",
-        "USDD", "PYUSD", "GUSD", "FRAX", "UST", "USTC", "MIM", "LUSD",
-        "SUSD", "ALUSD", "DOLA", "CUSD", "USDE", "SUSDE", "USD1", "RLUSD",
-        "EURT", "EURC", "EURS", "XSGD", "BIDR", "IDRT", "TRYB", "BRZ",
-    }
-    coins = [c for c in coins if (c.get("symbol") or "").upper() not in stable]
-    log(f"پس از فیلتر استیبل‌کوین: {len(coins)} توکن")
-    # فیلتر سهام توکنیزه OKX (که با X شروع می‌شوند)
-    coins = [c for c in coins if not (c.get("symbol") or "").upper().startswith("x")]
-    log(f"پس از فیلتر سهام توکنیزه: {len(coins)} توکن")
 
     # ترندها
     trending = get_trending_coins()
