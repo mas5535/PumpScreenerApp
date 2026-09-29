@@ -958,7 +958,8 @@ def run_scan():
 
     fetcher = MarketDataFetcher()
     coins = fetcher.get_top_coins(limit=180)
-    coins = coins[30:]  # رد کردن ۳۰ توکن برتر (که دستیار اول اسکن می‌کند)
+    log(f"CoinGecko برگرداند: {len(coins)} توکن")
+    coins = coins[30:]
     log(f"پس از رد کردن ۳۰ توکن برتر: {len(coins)} توکن")
     if not coins:
         log("دریافت داده ناموفق.")
