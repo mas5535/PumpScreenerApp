@@ -985,8 +985,30 @@ def run_scan():
 
     fetcher = MarketDataFetcher()
     coins = fetcher.get_top_coins(limit=180)
-    log(f"CoinGecko برگرداند: {len(coins)} توکن")
-    log(f"پس از رد کردن ۳۰ توکن برتر: {len(coins)} توکن")
+    log(f"OKX برگرداند: {len(coins)} توکن")
+
+    # فیلتر سهام توکنیزه (شروع با X)
+    coins = [c for c in coins if not (c.get("symbol") or "").upper().startswith("x")]
+    log(f"پس از فیلتر سهام: {len(coins)} توکن")
+
+    # فیلتر کالا (طلا، نقره)
+    commodities = {"PAXG", "XAUT", "XAU", "XAG"}
+    coins = [c for c in coins if (c.get("symbol") or "").upper() not in commodities]
+    log(f"پس از فیلتر کالا: {len(coins)} توکن")
+
+    # فیلتر ch24 مشکوک (بالای ۵۰٪)
+    coins = [c for c in coins if abs(c.get("price_change_percentage_24h_in_currency") or 0) < 50]
+    log(f"پس از فیلتر ch24: {len(coins)} توکن")
+
+    # فیلتر استیبل‌کوین
+    stablecoins = {
+        "USDT", "USDC", "DAI", "USDS", "BUSD", "TUSD", "USDP", "FDUSD",
+        "USDD", "PYUSD", "GUSD", "FRAX", "UST", "USTC", "MIM", "LUSD",
+        "SUSD", "ALUSD", "DOLA", "CUSD", "USDE", "SUSDE", "USD1", "RLUSD",
+        "EURT", "EURC", "EURS", "XSGD", "BIDR", "IDRT", "TRYB", "BRZ",
+    }
+    coins = [c for c in coins if (c.get("symbol") or "").upper() not in stablecoins]
+    log(f"پس از فیلتر استیبل‌کوین: {len(coins)} توکن")
     if not coins:
         log("دریافت داده ناموفق.")
         return []
@@ -1000,6 +1022,9 @@ def run_scan():
     }
     coins = [c for c in coins if (c.get("symbol") or "").upper() not in stable]
     log(f"پس از فیلتر استیبل‌کوین: {len(coins)} توکن")
+    # فیلتر سهام توکنیزه OKX (که با X شروع می‌شوند)
+    coins = [c for c in coins if not (c.get("symbol") or "").upper().startswith("x")]
+    log(f"پس از فیلتر سهام توکنیزه: {len(coins)} توکن")
 
     # ترندها
     trending = get_trending_coins()
