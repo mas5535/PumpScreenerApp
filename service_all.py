@@ -22,7 +22,7 @@ from datetime import datetime
 # تنظیمات
 # ============================================================
 STATE_FILE = "alerted_all.json"
-ACCUM_THRESHOLD = 55
+ACCUM_THRESHOLD = 65
 PUMP_THRESHOLD = 70
 
 
@@ -336,14 +336,20 @@ class MarketDataFetcher:
             coins = []
             for pair in usdt_pairs[:limit]:
                 symbol = pair.get("instId", "").replace("-USDT", "")
+                last = float(pair.get("last", 0) or 0)
+                open24 = float(pair.get("open24h", 0) or 0)
+                if open24 > 0:
+                    ch24 = ((last - open24) / open24) * 100
+                else:
+                    ch24 = 0
                 coins.append({
                     "id": symbol.lower(),
                     "symbol": symbol.lower(),
                     "name": symbol,
-                    "current_price": float(pair.get("last", 0) or 0),
-                    "market_cap": 0,  # OKX ندارد
+                    "current_price": last,
+                    "market_cap": 0,
                     "total_volume": float(pair.get("volCcy24h", 0) or 0),
-                    "price_change_percentage_24h_in_currency": 0,
+                    "price_change_percentage_24h_in_currency": ch24,
                     "price_change_percentage_1h_in_currency": 0,
                 })
             
