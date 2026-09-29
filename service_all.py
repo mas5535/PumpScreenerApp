@@ -22,7 +22,7 @@ from datetime import datetime
 # تنظیمات
 # ============================================================
 STATE_FILE = "alerted_all.json"
-ACCUM_THRESHOLD = 65
+ACCUM_THRESHOLD = 55
 PUMP_THRESHOLD = 70
 
 
