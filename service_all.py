@@ -312,25 +312,46 @@ class MarketDataFetcher:
         self.session = requests.Session()
         self.session.headers.update({"User-Agent": "PumpScreener/1.0"})
 
-    def get_top_coins(self, limit=30):
+    def get_top_coins(self, limit=200):
+        """دریافت توکن‌های برتر از OKX (رایگان و بدون محدودیت CoinGecko)"""
         try:
+            # دریافت لیست تیکرهای OKX (USDT pairs)
             r = self.session.get(
-                self.BASE_URL + "/coins/markets",
-                params={
-                    "vs_currency": "usd",
-                    "order": "market_cap_desc",
-                    "per_page": limit,
-                    "page": 1,
-                    "sparkline": False,
-                    "price_change_percentage": "1h,24h,7d",
-                },
-                timeout=30,
+                "https://www.okx.com/api/v5/market/tickers",
+                params={"instType": "SPOT"},
+                timeout=15
             )
-            if r.status_code == 200:
-                return r.json()
+            if r.status_code != 200:
+                log(f"خطا در OKX: {r.status_code}")
+                return []
+            
+            data = r.json().get("data", [])
+            # فیلتر USDT pairs
+            usdt_pairs = [d for d in data if d.get("instId", "").endswith("-USDT")]
+            
+            # مرتب‌سازی بر اساس حجم ۲۴ ساعته (نزولی)
+            usdt_pairs.sort(key=lambda x: float(x.get("volCcy24h", 0) or 0), reverse=True)
+            
+            # تبدیل به فرمت مشابه CoinGecko
+            coins = []
+            for pair in usdt_pairs[:limit]:
+                symbol = pair.get("instId", "").replace("-USDT", "")
+                coins.append({
+                    "id": symbol.lower(),
+                    "symbol": symbol.lower(),
+                    "name": symbol,
+                    "current_price": float(pair.get("last", 0) or 0),
+                    "market_cap": 0,  # OKX ندارد
+                    "total_volume": float(pair.get("volCcy24h", 0) or 0),
+                    "price_change_percentage_24h_in_currency": 0,
+                    "price_change_percentage_1h_in_currency": 0,
+                })
+            
+            log(f"OKX: {len(coins)} توکن دریافت شد.")
+            return coins
         except Exception as e:
-            log(f"خطا در دریافت داده: {e}")
-        return []
+            log(f"خطا در OKX: {e}")
+            return []
 
 
 def get_trending_coins():
@@ -959,7 +980,6 @@ def run_scan():
     fetcher = MarketDataFetcher()
     coins = fetcher.get_top_coins(limit=180)
     log(f"CoinGecko برگرداند: {len(coins)} توکن")
-    coins = coins[30:]
     log(f"پس از رد کردن ۳۰ توکن برتر: {len(coins)} توکن")
     if not coins:
         log("دریافت داده ناموفق.")
