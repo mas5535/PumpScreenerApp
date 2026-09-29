@@ -31,8 +31,7 @@ jobs:
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN_ALL }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID_ALL }}
-          SCAN_LIMIT: '180'
-          SKIP_TOP: '30' 
+          SCAN_LIMIT: '150'
         run: python service_all.py
 
       - name: Commit alerted_all.json
