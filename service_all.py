@@ -1006,6 +1006,7 @@ def run_scan():
         "USDD", "PYUSD", "GUSD", "FRAX", "UST", "USTC", "MIM", "LUSD",
         "SUSD", "ALUSD", "DOLA", "CUSD", "USDE", "SUSDE", "USD1", "RLUSD",
         "EURT", "EURC", "EURS", "XSGD", "BIDR", "IDRT", "TRYB", "BRZ",
+        "USDG",
     }
     coins = [c for c in coins if (c.get("symbol") or "").upper() not in stablecoins]
     log(f"پس از فیلتر استیبل‌کوین: {len(coins)} توکن")
