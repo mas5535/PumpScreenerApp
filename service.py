@@ -985,7 +985,7 @@ def run_scan():
     log(f"شروع اسکن انباشت... (هشدارها: {len(alerted_set)}, UTC: {hour_utc})")
 
     fetcher = MarketDataFetcher()
-    coins = fetcher.get_top_coins(limit=30)
+    coins = fetcher.get_top_coins(limit=50)
     if not coins:
         log("دریافت داده ناموفق.")
         return []
