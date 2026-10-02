@@ -784,23 +784,28 @@ def detect_accumulation(chart_data, coin):
         else:
             score += 5
             details["whale"] = f"🐋 {wh['count']} معامله بزرگ — متعادل"
+
+    # ============================================================
+    # تأیید نهایی: حداقل ۳ سیگنال قوی باید همزمان باشند
+    # ============================================================
+    strong = 0
     if details.get("divergence") and "قوی" in details["divergence"]:
-        strong_signals += 1
+        strong += 1
     if details.get("whale") and "خرید" in details["whale"]:
-        strong_signals += 1
+        strong += 1
     if details.get("multi_exchange") and "تأیید" in details["multi_exchange"]:
-        strong_signals += 1
+        strong += 1
     if details.get("trending"):
-        strong_signals += 1
+        strong += 1
     if details.get("bb") and "فشردگی" in details["bb"]:
-        strong_signals += 1
+        strong += 1
     if details.get("premium") and "بالای" in details["premium"]:
-        strong_signals += 1
-    
+        strong += 1
+
     # اگر کمتر از ۳ سیگنال قوی بود، امتیاز صفر
-    if strong_signals < 3:
+    if strong < 3:
         score = 0
-    
+
     return max(0, min(score, 100)), details
 
 
