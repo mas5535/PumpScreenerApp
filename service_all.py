@@ -1008,9 +1008,11 @@ def run_scan():
     log(f"شروع اسکن انباشت... (هشدارها: {len(alerted_set)}, UTC: {hour_utc})")
 
     fetcher = MarketDataFetcher()
-    coins = fetcher.get_top_coins(limit=180)
+    coins = fetcher.get_top_coins(limit=250)
     log(f"OKX برگرداند: {len(coins)} توکن")
-
+    coins = coins[50:]
+    log(f"پس از رد کردن ۵۰ توکن برتر: {len(coins)} توکن")
+    
     # فیلتر سهام توکنیزه (شروع با X)
     coins = [c for c in coins if not (c.get("symbol") or "").upper().lower().startswith("x")]
     log(f"پس از فیلتر سهام: {len(coins)} توکن")
