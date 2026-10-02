@@ -22,7 +22,7 @@ from datetime import datetime
 # تنظیمات
 # ============================================================
 STATE_FILE = "alerted_all.json"
-ACCUM_THRESHOLD = 55
+ACCUM_THRESHOLD = 70
 PUMP_THRESHOLD = 70
 
 
@@ -811,6 +811,30 @@ def detect_accumulation(chart_data, coin):
         else:
             score += 5
             details["whale"] = f"🐋 {wh['count']} معامله بزرگ — متعادل"
+
+    # ============================================================
+    # جریمه تدریجی بر اساس تعداد سیگنال‌های قوی
+    # ============================================================
+    strong = 0
+    if details.get("divergence") and "قوی" in details["divergence"]:
+        strong += 1
+    if details.get("whale") and "خرید" in details["whale"]:
+        strong += 1
+    if details.get("multi_exchange") and "تأیید" in details["multi_exchange"]:
+        strong += 1
+    if details.get("trending"):
+        strong += 1
+    if details.get("bb") and "فشردگی" in details["bb"]:
+        strong += 1
+    if details.get("premium") and "بالای" in details["premium"]:
+        strong += 1
+
+    if strong == 0:
+        score = int(score * 0.3)
+    elif strong == 1:
+        score = int(score * 0.6)
+    elif strong == 2:
+        score = int(score * 0.85)
 
     return max(0, min(score, 100)), details
 
