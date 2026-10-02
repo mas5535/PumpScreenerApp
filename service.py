@@ -22,7 +22,7 @@ from datetime import datetime
 # تنظیمات
 # ============================================================
 STATE_FILE = "alerted.json"
-ACCUM_THRESHOLD = 55
+ACCUM_THRESHOLD = 75
 PUMP_THRESHOLD = 70
 
 
@@ -784,7 +784,23 @@ def detect_accumulation(chart_data, coin):
         else:
             score += 5
             details["whale"] = f"🐋 {wh['count']} معامله بزرگ — متعادل"
-
+    if details.get("divergence") and "قوی" in details["divergence"]:
+        strong_signals += 1
+    if details.get("whale") and "خرید" in details["whale"]:
+        strong_signals += 1
+    if details.get("multi_exchange") and "تأیید" in details["multi_exchange"]:
+        strong_signals += 1
+    if details.get("trending"):
+        strong_signals += 1
+    if details.get("bb") and "فشردگی" in details["bb"]:
+        strong_signals += 1
+    if details.get("premium") and "بالای" in details["premium"]:
+        strong_signals += 1
+    
+    # اگر کمتر از ۳ سیگنال قوی بود، امتیاز صفر
+    if strong_signals < 3:
+        score = 0
+    
     return max(0, min(score, 100)), details
 
 
@@ -999,7 +1015,12 @@ def run_scan():
             final = tech * 0.55 + onc * 0.45
 
             c24 = abs(coin.get("price_change_percentage_24h_in_currency") or 0)
-            not_pumped = c24 < 10
+            # فقط توکن‌هایی که هنوز حرکت نکرده‌اند
+            not_pumped = c24 < 5
+            # و شتاب ۱ ساعته پایین است
+            c1h = abs(coin.get("price_change_percentage_1h_in_currency") or 0)
+            not_moving = c1h < 2
+            not_pumped = not_pumped and not_moving
 
             if accum >= ACCUM_THRESHOLD and not_pumped:
                 accum_alerts.append({
