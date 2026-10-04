@@ -973,23 +973,6 @@ def send_accumulation_alerts(token, chat_id, alerts, alerted_set):
     log(f"{len(new)} هشدار انباشت ارسال شد.")
     return True
 
-
-def send_daily_top5(token, chat_id, top5):
-    if not token or not chat_id or not top5:
-        return False
-    date_str = datetime.now().strftime('%Y-%m-%d %H:%M')
-    _send_one(token, chat_id, f"🏆 <b>گزارش روزانه — {date_str}</b>\n۵ توکن برتر")
-    time.sleep(2)
-    for i, a in enumerate(top5, 1):
-        msg = f"<b>🏆 رتبه #{i} — {a['symbol']}</b> (امتیاز {a['pump_score']}/100)\n"
-        msg += f"💵 ${a['price']:.6f} | 📈 {a['change_24h']:+.2f}%\n\n"
-        msg += generate_token_analysis(a)
-        _send_one(token, chat_id, msg)
-        time.sleep(3)
-    log("گزارش روزانه ارسال شد.")
-    return True
-
-
 # ============================================================
 # اجرای اصلی
 # ============================================================
@@ -1003,7 +986,6 @@ def run_scan():
 
     hour_utc = datetime.utcnow().hour
     today = datetime.now().strftime("%Y-%m-%d")
-    should_daily = (hour_utc >= 4) and (state["daily_sent"] != today)
 
     log(f"شروع اسکن انباشت... (هشدارها: {len(alerted_set)}, UTC: {hour_utc})")
 
@@ -1102,12 +1084,6 @@ def run_scan():
         save_state(state)
     else:
         log("هیچ توکنی در حال انباشت نیست.")
-
-    if should_daily and all_results:
-        log("📊 ارسال گزارش روزانه...")
-        send_daily_top5(token, chat_id, all_results[:5])
-        state["daily_sent"] = today
-        save_state(state)
 
     return all_results
 
